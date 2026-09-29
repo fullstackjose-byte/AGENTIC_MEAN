@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["dnsResolved", "tcpReachable", "latencyMs", "errorCode"],
+  "properties": {
+    "dnsResolved": { "type": "boolean" },
+    "tcpReachable": { "type": "boolean" },
+    "latencyMs": { "type": ["integer", "null"], "minimum": 0 },
+    "errorCode": {
+      "type": ["string", "null"],
+      "enum": ["DNS_FAILURE", "TCP_UNREACHABLE", "TOOL_UNAVAILABLE", null]
+    }
+  }
+}

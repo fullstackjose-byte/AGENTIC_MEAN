@@ -1,0 +1,19 @@
+{
+  "name": "ecosistema-agentes-helpdesk",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@12.6.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @helpdesk/api --filter @helpdesk/web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm test:unit",
+    "test:unit": "pnpm -r --if-present test",
+    "test:integration": "pnpm --filter @helpdesk/api test:e2e",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "db:generate": "pnpm --filter @helpdesk/api db:generate",
+    "db:migrate": "pnpm --filter @helpdesk/api db:migrate",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test:unit && pnpm build",
+    "dev:status": "node scripts/dev-status.mjs"
+  }
+}

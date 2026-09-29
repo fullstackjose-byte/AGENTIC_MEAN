@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ticketId", "operatingSystem", "errorMessage"],
+  "properties": {
+    "ticketId": { "type": "string", "format": "uuid" },
+    "operatingSystem": {
+      "type": "string",
+      "enum": ["WINDOWS", "MACOS", "LINUX"]
+    },
+    "errorMessage": { "type": "string", "minLength": 1, "maxLength": 2000 }
+  }
+}

@@ -1,0 +1,37 @@
+<main class="shell">
+  <section class="hero" aria-labelledby="page-title">
+    <p class="eyebrow">Mesa de soporte automatizada</p>
+    <h1 id="page-title">{{ title() }}</h1>
+    <p class="summary">
+      Angular y NestJS están ejecutándose dentro del Dev Container. El
+      proveedor de IA permanece en modo mock para un desarrollo seguro y
+      reproducible.
+    </p>
+
+    <div class="status-grid" aria-label="Estado del entorno">
+      <article data-testid="environment" class="status-card">
+        <span class="status-dot" aria-hidden="true"></span>
+        <div>
+          <strong>Entorno listo</strong>
+          <span>Dev Container activo</span>
+        </div>
+      </article>
+      <article class="status-card">
+        <span class="status-dot" aria-hidden="true"></span>
+        <div>
+          <strong>Backend disponible</strong>
+          <a href="http://localhost:3000/api/v1/health">Ver health check</a>
+        </div>
+      </article>
+      <article class="status-card">
+        <span class="status-dot status-dot--mock" aria-hidden="true"></span>
+        <div>
+          <strong>IA en modo mock</strong>
+          <span>No requiere API key</span>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <router-outlet />
+</main>

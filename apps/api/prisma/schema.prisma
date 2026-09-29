@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TicketStatus {
+  NEW
+  CLASSIFIED
+  IN_DIAGNOSIS
+  PENDING_USER
+  PENDING_APPROVAL
+  IN_REMEDIATION
+  ESCALATED
+  RESOLVED
+  CLOSED
+  REOPENED
+  CANCELLED
+}
+
+enum TicketPriority {
+  P1
+  P2
+  P3
+  P4
+}
+
+model Ticket {
+  id                   String         @id @db.Uuid
+  number               String         @unique @db.VarChar(32)
+  subject              String         @db.VarChar(200)
+  description          String         @db.Text
+  requesterId          String         @map("requester_id") @db.VarChar(120)
+  status               TicketStatus   @default(NEW)
+  priority             TicketPriority @default(P4)
+  containsRedactedData Boolean        @default(false) @map("contains_redacted_data")
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  classifications      TicketClassification[]
+  diagnosticRuns       DiagnosticRun[]
+  remediations         Remediation[]
+  auditEvents          AuditEvent[]
+
+  @@index([status, priority])
+  @@index([createdAt])
+  @@map("tickets")
+}
+
+model AuditEvent {
+  id        String   @id @db.Uuid
+  ticketId  String   @map("ticket_id") @db.Uuid
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  type      String   @db.VarChar(64)
+  actorId   String   @map("actor_id") @db.VarChar(120)
+  metadata  Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([ticketId, createdAt])
+  @@map("audit_events")
+}
+
+model Remediation {
+  id                 String   @id @db.Uuid
+  ticketId           String   @map("ticket_id") @db.Uuid
+  ticket             Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  action             String   @db.VarChar(64)
+  risk               String   @db.VarChar(20)
+  status             String   @db.VarChar(32)
+  verificationStatus String   @map("verification_status") @db.VarChar(20)
+  requestedBy        String   @map("requested_by") @db.VarChar(120)
+  decidedBy          String?  @map("decided_by") @db.VarChar(120)
+  decisionReason     String?  @map("decision_reason") @db.Text
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([ticketId, createdAt])
+  @@index([status])
+  @@map("remediations")
+}
+
+model DiagnosticRun {
+  id              String   @id @db.Uuid
+  ticketId        String   @map("ticket_id") @db.Uuid
+  ticket          Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  operatingSystem String   @map("operating_system") @db.VarChar(20)
+  errorMessage    String   @map("error_message") @db.Text
+  dnsResolved     Boolean  @map("dns_resolved")
+  tcpReachable    Boolean  @map("tcp_reachable")
+  latencyMs       Int?     @map("latency_ms")
+  errorCode       String?  @map("error_code") @db.VarChar(40)
+  outcome         String   @db.VarChar(40)
+  recommendation  String   @db.VarChar(64)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([ticketId, createdAt])
+  @@map("diagnostic_runs")
+}
+
+model TicketClassification {
+  id                 String         @id @db.Uuid
+  ticketId           String         @map("ticket_id") @db.Uuid
+  ticket             Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  category           String         @db.VarChar(64)
+  subcategory        String         @db.VarChar(80)
+  impact             String         @db.VarChar(32)
+  urgency            String         @db.VarChar(32)
+  priority           TicketPriority
+  confidence         Float
+  entities           Json
+  missingInformation Json           @map("missing_information")
+  nextAction         String         @map("next_action") @db.VarChar(40)
+  reason             String         @db.VarChar(64)
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_classifications")
+}

@@ -1,0 +1,218 @@
+<section class="tickets" aria-labelledby="tickets-title">
+  <header>
+    <p class="eyebrow">Primer flujo funcional</p>
+    <h2 id="tickets-title">Tickets de soporte</h2>
+    @if (tracking.lastCorrelationId(); as correlationId) {
+      <p class="tracking-id">ID de seguimiento: <code>{{ correlationId }}</code></p>
+    }
+    <p>Crea una solicitud y consúltala inmediatamente en PostgreSQL.</p>
+  </header>
+
+  <div class="tickets-grid">
+    <form class="ticket-form" [formGroup]="form" (ngSubmit)="submit()">
+      <h3>Nueva solicitud</h3>
+
+      <label for="subject">Asunto</label>
+      <input id="subject" formControlName="subject" placeholder="Ej. No puedo conectarme a la VPN" />
+
+      <label for="description">Descripción</label>
+      <textarea id="description" formControlName="description" rows="5" placeholder="Describe el problema sin incluir contraseñas ni tokens"></textarea>
+
+      <label for="requesterId">Usuario</label>
+      <input id="requesterId" formControlName="requesterId" />
+
+      <button type="submit" [disabled]="form.invalid || saving()">
+        {{ saving() ? 'Guardando...' : 'Crear ticket' }}
+      </button>
+    </form>
+
+    <div class="ticket-list" aria-live="polite">
+      <div class="list-title">
+        <h3>Solicitudes recientes</h3>
+        <button type="button" class="secondary" (click)="load()">Actualizar</button>
+      </div>
+
+      <div class="ticket-filters">
+        <input #ticketSearch aria-label="Buscar tickets" placeholder="Número o asunto" />
+        <select #ticketStatus aria-label="Filtrar por estado">
+          <option value="">Todos los estados</option>
+          <option value="NEW">Nuevo</option>
+          <option value="CLASSIFIED">Clasificado</option>
+          <option value="IN_DIAGNOSIS">En diagnóstico</option>
+          <option value="PENDING_APPROVAL">Pendiente de aprobación</option>
+          <option value="IN_REMEDIATION">En remediación</option>
+          <option value="RESOLVED">Resuelto</option>
+          <option value="CLOSED">Cerrado</option>
+          <option value="ESCALATED">Escalado</option>
+        </select>
+        <select #ticketPriority aria-label="Filtrar por prioridad">
+          <option value="">Todas las prioridades</option>
+          <option value="P1">P1</option>
+          <option value="P2">P2</option>
+          <option value="P3">P3</option>
+          <option value="P4">P4</option>
+        </select>
+        <button
+          type="button"
+          class="secondary"
+          (click)="applyFilters(ticketSearch.value, ticketStatus.value, ticketPriority.value)"
+        >Filtrar</button>
+      </div>
+
+      @if (error()) {
+        <p class="message message--error">{{ error() }}</p>
+      } @else if (loading() && tickets().length === 0) {
+        <p class="message">Consultando tickets...</p>
+      } @else if (tickets().length === 0) {
+        <p class="message">Todavía no hay tickets.</p>
+      } @else {
+        @for (ticket of tickets(); track ticket.id) {
+          <article class="ticket-card">
+            <div>
+              <span class="ticket-number">{{ ticket.number }}</span>
+              <h4>{{ ticket.subject }}</h4>
+            </div>
+            <div class="badges">
+              <span>{{ ticket.priority }}</span>
+              <span>{{ ticket.status }}</span>
+            </div>
+            <p>{{ ticket.description }}</p>
+            <small>{{ ticket.createdAt | date: 'medium' }}</small>
+            @if (ticket.status === 'NEW') {
+              <button
+                type="button"
+                class="secondary"
+                [disabled]="classifyingId() !== null"
+                (click)="classify(ticket.id)"
+              >
+                {{ classifyingId() === ticket.id ? 'Clasificando...' : 'Clasificar con agente' }}
+              </button>
+            }
+            @if (ticket.status === 'CLASSIFIED' || ticket.status === 'REOPENED') {
+              <div class="diagnostic-actions">
+                <select #operatingSystem aria-label="Sistema operativo">
+                  <option value="WINDOWS">Windows</option>
+                  <option value="MACOS">macOS</option>
+                  <option value="LINUX">Linux</option>
+                </select>
+                <button
+                  type="button"
+                  class="secondary"
+                  [disabled]="diagnosingId() !== null"
+                  (click)="diagnose(ticket, operatingSystem.value)"
+                >
+                  {{ diagnosingId() === ticket.id ? 'Diagnosticando...' : 'Diagnosticar VPN' }}
+                </button>
+              </div>
+            }
+            @if (diagnostics()[ticket.id]; as diagnostic) {
+              <div class="diagnostic-result">
+                <strong>{{ diagnostic.outcome }}</strong>
+                <span>DNS: {{ diagnostic.dnsResolved ? 'OK' : 'Fallo' }}</span>
+                <span>TCP: {{ diagnostic.tcpReachable ? 'OK' : 'Fallo' }}</span>
+                <span>{{ diagnostic.recommendation }}</span>
+              </div>
+            }
+            @if (ticket.status === 'IN_DIAGNOSIS') {
+              <div class="diagnostic-actions">
+                <select #remediationAction aria-label="Acción de remediación">
+                  <option value="REFRESH_VPN_PROFILE">Actualizar perfil VPN (riesgo bajo)</option>
+                  <option value="RESET_VPN_CONFIGURATION">Restablecer configuración (requiere aprobación)</option>
+                </select>
+                <button
+                  type="button"
+                  class="secondary"
+                  [disabled]="remediationBusyId() !== null"
+                  (click)="remediate(ticket.id, remediationAction.value)"
+                >
+                  {{ remediationBusyId() === ticket.id ? 'Procesando...' : 'Proponer remediación' }}
+                </button>
+              </div>
+            }
+            @if (remediations()[ticket.id]; as remediation) {
+              <div class="diagnostic-result">
+                <strong>{{ remediation.action }}</strong>
+                <span>Riesgo: {{ remediation.risk }}</span>
+                <span>Estado: {{ remediation.status }}</span>
+                <span>Verificación: {{ remediation.verificationStatus }}</span>
+              </div>
+            }
+            @if (ticket.status === 'IN_REMEDIATION') {
+              <button
+                type="button"
+                class="secondary"
+                [disabled]="remediationBusyId() !== null"
+                (click)="resolve(ticket.id)"
+              >
+                Marcar como resuelto
+              </button>
+            }
+            @if (ticket.status === 'RESOLVED') {
+              <div class="approval-actions">
+                <button
+                  type="button"
+                  [disabled]="lifecycleBusyId() !== null"
+                  (click)="close(ticket.id)"
+                >Cerrar</button>
+                <button
+                  type="button"
+                  class="secondary"
+                  [disabled]="lifecycleBusyId() !== null"
+                  (click)="reopen(ticket.id)"
+                >Reabrir</button>
+              </div>
+            }
+            <button type="button" class="timeline-button" (click)="loadTimeline(ticket.id)">
+              Ver línea de tiempo
+            </button>
+            @if (timelines()[ticket.id]; as events) {
+              <ol class="timeline">
+                @for (event of events; track event.id) {
+                  <li>
+                    <strong>{{ event.type }}</strong>
+                    <span>{{ event.actorId }}</span>
+                    <small>{{ event.createdAt | date: 'medium' }}</small>
+                  </li>
+                }
+              </ol>
+            }
+          </article>
+        }
+        @if (hasNextPage()) {
+          <button type="button" class="secondary load-more" [disabled]="loading()" (click)="loadMore()">
+            {{ loading() ? 'Cargando...' : 'Cargar más' }}
+          </button>
+        }
+      }
+    </div>
+  </div>
+
+  <section class="approvals" aria-labelledby="approvals-title">
+    <h3 id="approvals-title">Aprobaciones pendientes</h3>
+    @if (pendingRemediations().length === 0) {
+      <p class="message">No hay remediaciones pendientes.</p>
+    } @else {
+      @for (remediation of pendingRemediations(); track remediation.id) {
+        <article class="approval-card">
+          <div>
+            <strong>{{ remediation.action }}</strong>
+            <small>Ticket {{ remediation.ticketId }} · Riesgo {{ remediation.risk }}</small>
+          </div>
+          <div class="approval-actions">
+            <button
+              type="button"
+              [disabled]="remediationBusyId() !== null"
+              (click)="decide(remediation, true)"
+            >Aprobar</button>
+            <button
+              type="button"
+              class="danger"
+              [disabled]="remediationBusyId() !== null"
+              (click)="decide(remediation, false)"
+            >Rechazar</button>
+          </div>
+        </article>
+      }
+    }
+  </section>
+</section>
