@@ -18,7 +18,7 @@ export class PrismaAuditEventRepository implements AuditEventRepository {
   async findByTicketId(ticketId: string): Promise<AuditEvent[]> {
     const records = await this.prisma.auditEvent.findMany({
       where: { ticketId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
     return records.map((record) => ({
       ...record,

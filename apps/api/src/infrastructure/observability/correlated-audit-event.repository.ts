@@ -1,6 +1,7 @@
 import type { AuditEventRepository } from '../../domain/audit/audit-event.repository.js';
 import type { AuditEvent } from '../../domain/audit/audit-event.js';
 import type { RequestContextService } from './request-context.service.js';
+import { sanitizeLogValue } from './log-sanitizer.js';
 
 export class CorrelatedAuditEventRepository implements AuditEventRepository {
   constructor(
@@ -10,11 +11,14 @@ export class CorrelatedAuditEventRepository implements AuditEventRepository {
 
   append(event: AuditEvent): Promise<void> {
     const correlationId = this.context.correlationId;
+    const metadata = sanitizeLogValue({
+      result: event.metadata.result ?? event.metadata.ticketStatus ?? 'RECORDED',
+      ...event.metadata,
+      ...(correlationId ? { correlationId } : {}),
+    }) as AuditEvent['metadata'];
     return this.repository.append({
       ...event,
-      metadata: correlationId
-        ? { ...event.metadata, correlationId }
-        : event.metadata,
+      metadata,
     });
   }
 

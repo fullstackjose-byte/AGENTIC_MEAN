@@ -56,6 +56,7 @@ import { ReopenTicketUseCase } from './application/tickets/reopen-ticket.use-cas
 import { GetTicketTimelineUseCase } from './application/tickets/get-ticket-timeline.use-case.js';
 import { RequestContextService } from './infrastructure/observability/request-context.service.js';
 import { CorrelatedAuditEventRepository } from './infrastructure/observability/correlated-audit-event.repository.js';
+import { GetTicketCapabilitiesUseCase } from './application/triage/get-ticket-capabilities.use-case.js';
 
 const AUDIT_EVENT_STORAGE = Symbol('AUDIT_EVENT_STORAGE');
 
@@ -161,6 +162,12 @@ const AUDIT_EVENT_STORAGE = Symbol('AUDIT_EVENT_STORAGE');
           undefined,
           audit,
         ),
+    },
+    {
+      provide: GetTicketCapabilitiesUseCase,
+      inject: [CLASSIFICATION_REPOSITORY],
+      useFactory: (classifications: ClassificationRepository) =>
+        new GetTicketCapabilitiesUseCase(classifications),
     },
     {
       provide: StartVpnDiagnosticUseCase,

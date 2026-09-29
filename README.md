@@ -35,6 +35,8 @@ Los errores HTTP usan `application/problem+json` conforme a Problem Details (RFC
 - Crear y listar tickets desde Angular.
 - Redactar tokens y contraseñas antes de persistir.
 - Clasificar un ticket con el agente local desde la interfaz.
+- Consultar capacidades calculadas por el backend para mostrar solamente acciones compatibles.
+- Orientar identidad y aprovisionamiento a una solicitud segura de información o a escalamiento humano.
 - Ejecutar un diagnóstico VPN mock con evidencia DNS/TCP.
 - Proponer remediaciones allowlisted de riesgo bajo o medio.
 - Aprobar o rechazar acciones de riesgo medio desde Angular o Swagger.
@@ -78,6 +80,7 @@ Rutas implementadas:
 - `GET /api/v1/tickets`
 - `GET /api/v1/tickets/:id`
 - `POST /api/v1/tickets/:id/classifications`
+- `GET /api/v1/tickets/:id/capabilities`
 - `POST /api/v1/tickets/:id/diagnostics`
 - `POST /api/v1/tickets/:id/remediations`
 - `GET /api/v1/remediations/pending`

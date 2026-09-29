@@ -59,8 +59,20 @@ export class StartVpnDiagnosticUseCase {
       !latest ||
       latest.category !== 'INFRASTRUCTURE_SOFTWARE' ||
       latest.subcategory !== 'VPN' ||
-      latest.confidence < 0.8
+      latest.confidence < 0.8 ||
+      latest.missingInformation.length > 0
     ) {
+      await this.audit.append({
+        id: this.dependencies.nextId(),
+        ticketId,
+        type: 'DIAGNOSTIC_REJECTED',
+        actorId: 'diagnostic-agent',
+        metadata: {
+          result: 'REJECTED',
+          reason: 'INCOMPATIBLE_OR_INCOMPLETE_CLASSIFICATION',
+        },
+        createdAt: this.dependencies.now(),
+      });
       throw new UnsupportedDiagnosticError(
         'A VPN classification with confidence >= 0.80 is required',
       );

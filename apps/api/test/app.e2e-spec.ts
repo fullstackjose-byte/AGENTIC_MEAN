@@ -77,6 +77,20 @@ describe('AppController (e2e)', () => {
       '/api/v1/tickets/{id}/timeline',
     );
     expect(specification.body.paths).toHaveProperty(
+      '/api/v1/tickets/{id}/capabilities',
+    );
+    expect(
+      specification.body.components.schemas.TriageEntitiesDto.properties,
+    ).toMatchObject({
+      affectedUser: expect.any(Object),
+      impactedService: expect.any(Object),
+      businessCriticality: expect.any(Object),
+    });
+    expect(
+      specification.body.paths['/api/v1/tickets/{id}/capabilities'].get
+        .responses['200'].content['application/json'].schema.$ref,
+    ).toBe('#/components/schemas/TicketCapabilitiesDto');
+    expect(specification.body.paths).toHaveProperty(
       '/api/v1/tickets/{id}/closure',
     );
     expect(specification.body.paths).toHaveProperty(
@@ -198,7 +212,20 @@ describe('AppController (e2e)', () => {
       nextAction: 'HANDOFF_DIAGNOSTIC',
       reason: 'SUPPORTED_AND_COMPLETE',
       ticketStatus: 'CLASSIFIED',
+      capabilities: {
+        allowedActions: ['RUN_VPN_DIAGNOSTIC'],
+        guidanceCode: 'VPN_DIAGNOSTIC_AVAILABLE',
+      },
     });
+
+    const capabilities = await asRole(
+      request(app.getHttpServer()).get(
+        `/api/v1/tickets/${created.body.id}/capabilities`,
+      ),
+      'SUPPORT_AGENT',
+      'support-1',
+    ).expect(200);
+    expect(capabilities.body.allowedActions).toEqual(['RUN_VPN_DIAGNOSTIC']);
 
     const diagnostic = await asRole(
       request(app.getHttpServer()).post(
@@ -356,6 +383,43 @@ describe('AppController (e2e)', () => {
       verificationStatus: 'PASSED',
       ticketStatus: 'IN_REMEDIATION',
     });
+  });
+
+  it.each([
+    ['Cuenta bloqueada', 'Mi cuenta no permite iniciar sesión', 'ACCESS_IDENTITY'],
+    ['Necesito una licencia', 'Solicito acceso a un repositorio', 'PROVISIONING_PERMISSIONS'],
+  ])('never offers VPN diagnosis for %s', async (subject, description, category) => {
+    const created = await asRole(
+      request(app.getHttpServer()).post('/api/v1/tickets'),
+      'END_USER',
+      'typology-user',
+    )
+      .send({ subject, description, requesterId: 'typology-user' })
+      .expect(201);
+    const triage = await asRole(
+      request(app.getHttpServer()).post(
+        `/api/v1/tickets/${created.body.id}/classifications`,
+      ),
+      'SUPPORT_AGENT',
+      'support-1',
+    ).expect(201);
+    expect(triage.body).toMatchObject({
+      category,
+      ticketStatus: 'ESCALATED',
+      nextAction: 'ESCALATE_HUMAN',
+    });
+    expect(triage.body.capabilities.allowedActions).not.toContain(
+      'RUN_VPN_DIAGNOSTIC',
+    );
+    await asRole(
+      request(app.getHttpServer()).post(
+        `/api/v1/tickets/${created.body.id}/diagnostics`,
+      ),
+      'SUPPORT_AGENT',
+      'support-1',
+    )
+      .send({ operatingSystem: 'WINDOWS', errorMessage: 'No conecta' })
+      .expect(400);
   });
 
   afterEach(async () => {

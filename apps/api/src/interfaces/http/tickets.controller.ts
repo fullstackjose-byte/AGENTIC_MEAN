@@ -13,10 +13,13 @@ import {
 } from '@nestjs/common';
 import {
   ApiOperation,
+  ApiOkResponse,
+  ApiExtraModels,
   ApiParam,
   ApiQuery,
   ApiSecurity,
   ApiTags,
+  getSchemaPath,
 } from '@nestjs/swagger';
 import { CreateTicketUseCase } from '../../application/tickets/create-ticket.use-case.js';
 import {
@@ -38,6 +41,8 @@ import {
   ResolveTicketDto,
   StartVpnDiagnosticDto,
   TicketLifecycleDto,
+  TicketCapabilitiesDto,
+  TicketClassificationDto,
 } from './ticket.dto.js';
 import {
   ProhibitedRemediationError,
@@ -49,10 +54,15 @@ import { ReopenTicketUseCase } from '../../application/tickets/reopen-ticket.use
 import { GetTicketTimelineUseCase } from '../../application/tickets/get-ticket-timeline.use-case.js';
 import { Roles } from '../auth/auth.decorators.js';
 import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import {
+  ClassificationNotFoundError,
+  GetTicketCapabilitiesUseCase,
+} from '../../application/triage/get-ticket-capabilities.use-case.js';
 
 @ApiTags('Tickets')
 @ApiSecurity('user-id')
 @ApiSecurity('user-role')
+@ApiExtraModels(TicketClassificationDto, TicketCapabilitiesDto)
 @Controller('api/v1/tickets')
 export class TicketsController {
   constructor(
@@ -64,6 +74,8 @@ export class TicketsController {
     private readonly listTickets: ListTicketsUseCase,
     @Inject(TriageTicketUseCase)
     private readonly triageTicket: TriageTicketUseCase,
+    @Inject(GetTicketCapabilitiesUseCase)
+    private readonly getCapabilities: GetTicketCapabilitiesUseCase,
     @Inject(StartVpnDiagnosticUseCase)
     private readonly startVpnDiagnostic: StartVpnDiagnosticUseCase,
     @Inject(ProposeRemediationUseCase)
@@ -181,6 +193,24 @@ export class TicketsController {
   @Roles('SUPPORT_AGENT', 'ADMIN')
   @ApiOperation({ summary: 'Clasificar y priorizar un ticket' })
   @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(TicketClassificationDto) },
+        {
+          type: 'object',
+          required: ['ticketStatus', 'capabilities'],
+          properties: {
+            ticketStatus: {
+              type: 'string',
+              enum: ['CLASSIFIED', 'ESCALATED'],
+            },
+            capabilities: { $ref: getSchemaPath(TicketCapabilitiesDto) },
+          },
+        },
+      ],
+    },
+  })
   async classify(@Param('id') id: string) {
     try {
       return await this.triageTicket.execute(id);
@@ -259,6 +289,28 @@ export class TicketsController {
   ) {
     await this.assertTicketAccess(id, request);
     return this.getTimeline.execute(id);
+  }
+
+  @Get(':id/capabilities')
+  @Roles('END_USER', 'SUPPORT_AGENT', 'ADMIN', 'AUDITOR')
+  @ApiOperation({
+    summary: 'Consultar clasificación y acciones permitidas por el backend',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: TicketCapabilitiesDto })
+  async capabilities(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    await this.assertTicketAccess(id, request);
+    try {
+      return await this.getCapabilities.execute(id);
+    } catch (error) {
+      if (error instanceof ClassificationNotFoundError) {
+        throw new NotFoundException(error.message);
+      }
+      throw error;
+    }
   }
 
   @Get(':id')

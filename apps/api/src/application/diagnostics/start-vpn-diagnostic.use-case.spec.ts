@@ -40,7 +40,11 @@ const vpnClassification = (): TicketClassification => ({
   urgency: 'MEDIUM',
   priority: 'P3',
   confidence: 0.94,
-  entities: { service: 'corporate-vpn' },
+  entities: {
+    affectedUser: 'user-123',
+    impactedService: 'corporate-vpn',
+    businessCriticality: 'MEDIUM',
+  },
   missingInformation: [],
   nextAction: 'HANDOFF_DIAGNOSTIC',
   reason: 'SUPPORTED_AND_COMPLETE',

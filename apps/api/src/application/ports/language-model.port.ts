@@ -11,13 +11,19 @@ export type SupportCategory =
 export type TriageImpact = 'SINGLE_USER' | 'MULTIPLE_USERS' | 'WIDESPREAD';
 export type TriageUrgency = 'LOW' | 'MEDIUM' | 'HIGH';
 
+export interface TriageEntities {
+  affectedUser?: string;
+  impactedService?: string;
+  businessCriticality?: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+
 export interface TriageModelOutput {
   category: SupportCategory;
   subcategory: string;
   impact: TriageImpact;
   urgency: TriageUrgency;
   confidence: number;
-  entities: Record<string, string>;
+  entities: TriageEntities;
   missingInformation: string[];
 }
 

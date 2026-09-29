@@ -60,8 +60,12 @@
       </div>
 
       @if (error()) {
-        <p class="message message--error">{{ error() }}</p>
-      } @else if (loading() && tickets().length === 0) {
+        <p class="message message--error" role="alert">{{ error() }}</p>
+      }
+      @if (success()) {
+        <p class="message message--success" role="status">{{ success() }}</p>
+      }
+      @if (loading() && tickets().length === 0) {
         <p class="message">Consultando tickets...</p>
       } @else if (tickets().length === 0) {
         <p class="message">Todavía no hay tickets.</p>
@@ -73,9 +77,9 @@
               <h4>{{ ticket.subject }}</h4>
             </div>
             <div class="badges">
-              <span>{{ ticket.priority }}</span>
-              <span>{{ ticket.status }}</span>
+              <span>Prioridad {{ ticket.priority }}</span>
             </div>
+            <p class="current-status"><strong>Estado actual:</strong> {{ statusMessage(ticket.status) }}</p>
             <p>{{ ticket.description }}</p>
             <small>{{ ticket.createdAt | date: 'medium' }}</small>
             @if (ticket.status === 'NEW') {
@@ -88,7 +92,26 @@
                 {{ classifyingId() === ticket.id ? 'Clasificando...' : 'Clasificar con agente' }}
               </button>
             }
-            @if (ticket.status === 'CLASSIFIED' || ticket.status === 'REOPENED') {
+            @if (capabilities()[ticket.id]; as ticketCapabilities) {
+              <section class="classification" aria-label="Clasificación y siguiente paso">
+                <strong>{{ categoryMessage(ticketCapabilities.classification.category) }}</strong>
+                <span>{{ guidanceMessage(ticketCapabilities) }}</span>
+                <span>{{ ticketCapabilities.slaExpectation }}</span>
+                <dl>
+                  <div><dt>Usuario afectado</dt><dd>{{ ticketCapabilities.classification.entities.affectedUser || 'Por confirmar' }}</dd></div>
+                  <div><dt>Servicio</dt><dd>{{ ticketCapabilities.classification.entities.impactedService || 'Por confirmar' }}</dd></div>
+                  <div><dt>Criticidad</dt><dd>{{ ticketCapabilities.classification.entities.businessCriticality || 'Por confirmar' }}</dd></div>
+                </dl>
+                @if (ticketCapabilities.classification.missingInformation.length > 0) {
+                  <span>Información faltante: {{ ticketCapabilities.classification.missingInformation.join(', ') }}</span>
+                }
+                <details>
+                  <summary>Detalles técnicos de clasificación</summary>
+                  <code>{{ ticketCapabilities.classification.category }} / {{ ticketCapabilities.classification.subcategory }} · confianza {{ ticketCapabilities.classification.confidence }}</code>
+                </details>
+              </section>
+            }
+            @if ((ticket.status === 'CLASSIFIED' || ticket.status === 'REOPENED') && capabilities()[ticket.id]?.allowedActions?.includes('RUN_VPN_DIAGNOSTIC')) {
               <div class="diagnostic-actions">
                 <select #operatingSystem aria-label="Sistema operativo">
                   <option value="WINDOWS">Windows</option>
@@ -107,10 +130,13 @@
             }
             @if (diagnostics()[ticket.id]; as diagnostic) {
               <div class="diagnostic-result">
-                <strong>{{ diagnostic.outcome }}</strong>
-                <span>DNS: {{ diagnostic.dnsResolved ? 'OK' : 'Fallo' }}</span>
-                <span>TCP: {{ diagnostic.tcpReachable ? 'OK' : 'Fallo' }}</span>
-                <span>{{ diagnostic.recommendation }}</span>
+                <strong>{{ diagnosticMessage(diagnostic) }}</strong>
+                <span>{{ recommendationMessage(diagnostic.recommendation) }}</span>
+                <details>
+                  <summary>Detalles técnicos</summary>
+                  <code>{{ diagnostic.outcome }} · {{ diagnostic.recommendation }}</code>
+                  <span>DNS: {{ diagnostic.dnsResolved ? 'OK' : 'Fallo' }} · TCP: {{ diagnostic.tcpReachable ? 'OK' : 'Fallo' }}</span>
+                </details>
               </div>
             }
             @if (ticket.status === 'IN_DIAGNOSIS') {
@@ -131,10 +157,12 @@
             }
             @if (remediations()[ticket.id]; as remediation) {
               <div class="diagnostic-result">
-                <strong>{{ remediation.action }}</strong>
-                <span>Riesgo: {{ remediation.risk }}</span>
-                <span>Estado: {{ remediation.status }}</span>
-                <span>Verificación: {{ remediation.verificationStatus }}</span>
+                <strong>{{ remediationActionMessage(remediation.action) }}</strong>
+                <span>{{ remediationMessage(remediation) }}</span>
+                <details>
+                  <summary>Detalles técnicos</summary>
+                  <code>{{ remediation.action }} · {{ remediation.status }} · {{ remediation.verificationStatus }}</code>
+                </details>
               </div>
             }
             @if (ticket.status === 'IN_REMEDIATION') {
@@ -195,7 +223,7 @@
       @for (remediation of pendingRemediations(); track remediation.id) {
         <article class="approval-card">
           <div>
-            <strong>{{ remediation.action }}</strong>
+            <strong>{{ remediationActionMessage(remediation.action) }}</strong>
             <small>Ticket {{ remediation.ticketId }} · Riesgo {{ remediation.risk }}</small>
           </div>
           <div class="approval-actions">

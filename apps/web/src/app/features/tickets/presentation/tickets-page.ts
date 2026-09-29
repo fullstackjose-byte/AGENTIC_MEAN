@@ -11,10 +11,21 @@ import type {
   TicketFilters,
   TicketPriority,
   TicketStatus,
+  TicketCapabilities,
 } from '../domain/ticket.model';
 import { TicketsApiService } from '../infrastructure/tickets-api.service';
 import type { Observable } from 'rxjs';
 import { RequestTrackingService } from '../../../core/observability/request-tracking.service';
+import {
+  diagnosticMessage,
+  categoryMessage,
+  guidanceMessage,
+  problemMessage,
+  recommendationMessage,
+  remediationMessage,
+  remediationActionMessage,
+  statusMessage,
+} from './ticket-presenter';
 
 @Component({
   selector: 'app-tickets-page',
@@ -38,6 +49,8 @@ export class TicketsPage implements OnInit {
   protected readonly timelines = signal<Record<string, AuditEvent[]>>({});
   protected readonly lifecycleBusyId = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
+  protected readonly success = signal<string | null>(null);
+  protected readonly capabilities = signal<Record<string, TicketCapabilities>>({});
   protected readonly nextCursor = signal<string | null>(null);
   protected readonly hasNextPage = signal(false);
   private readonly filters = signal<TicketFilters>({ limit: 20 });
@@ -75,10 +88,13 @@ export class TicketsPage implements OnInit {
         );
         this.nextCursor.set(connection.pageInfo.nextCursor);
         this.hasNextPage.set(connection.pageInfo.hasNextPage);
+        for (const ticket of connection.items) {
+          if (ticket.status !== 'NEW') this.loadCapabilities(ticket.id);
+        }
         this.loading.set(false);
       },
-      error: () => {
-        this.error.set('No fue posible consultar los tickets.');
+      error: (error) => {
+        this.error.set(problemMessage(error, 'No fue posible consultar los tickets.'));
         this.loading.set(false);
       },
     });
@@ -105,15 +121,17 @@ export class TicketsPage implements OnInit {
     }
     this.saving.set(true);
     this.error.set(null);
+    this.success.set(null);
     this.api.create(this.form.getRawValue()).subscribe({
       next: (ticket) => {
         this.tickets.update((tickets) => [ticket, ...tickets]);
         this.form.controls.subject.reset('');
         this.form.controls.description.reset('');
         this.saving.set(false);
+        this.success.set(`El ticket ${ticket.number} fue creado correctamente.`);
       },
-      error: () => {
-        this.error.set('No fue posible crear el ticket.');
+      error: (error) => {
+        this.error.set(problemMessage(error, 'No fue posible crear el ticket.'));
         this.saving.set(false);
       },
     });
@@ -123,6 +141,7 @@ export class TicketsPage implements OnInit {
     if (this.classifyingId()) return;
     this.classifyingId.set(ticketId);
     this.error.set(null);
+    this.success.set(null);
     this.api.triage(ticketId).subscribe({
       next: (classification) => {
         this.tickets.update((tickets) =>
@@ -136,10 +155,15 @@ export class TicketsPage implements OnInit {
               : ticket,
           ),
         );
+        this.capabilities.update((current) => ({
+          ...current,
+          [ticketId]: classification.capabilities,
+        }));
+        this.success.set('La solicitud fue clasificada y tiene un siguiente paso definido.');
         this.classifyingId.set(null);
       },
-      error: () => {
-        this.error.set('No fue posible clasificar el ticket.');
+      error: (error) => {
+        this.error.set(problemMessage(error, 'No fue posible clasificar el ticket.'));
         this.classifyingId.set(null);
       },
     });
@@ -154,6 +178,7 @@ export class TicketsPage implements OnInit {
     }
     this.diagnosingId.set(ticket.id);
     this.error.set(null);
+    this.success.set(null);
     this.api
       .diagnose(ticket.id, {
         operatingSystem: operatingSystem as OperatingSystem,
@@ -172,10 +197,11 @@ export class TicketsPage implements OnInit {
                 : current,
             ),
           );
+          this.success.set('El diagnóstico terminó y ya puedes revisar el resultado.');
           this.diagnosingId.set(null);
         },
-        error: () => {
-          this.error.set('No fue posible ejecutar el diagnóstico.');
+        error: (error) => {
+          this.error.set(problemMessage(error, 'No fue posible ejecutar el diagnóstico.'));
           this.diagnosingId.set(null);
         },
       });
@@ -191,6 +217,7 @@ export class TicketsPage implements OnInit {
     }
     this.remediationBusyId.set(ticketId);
     this.error.set(null);
+    this.success.set(null);
     this.api
       .remediate(ticketId, {
         action: action as RemediationAction,
@@ -205,11 +232,16 @@ export class TicketsPage implements OnInit {
           if (remediation.ticketStatus) {
             this.updateTicketStatus(ticketId, remediation.ticketStatus);
           }
+          this.success.set(
+            remediation.status === 'PENDING_APPROVAL'
+              ? 'La remediación quedó pendiente de aprobación independiente.'
+              : 'La remediación de bajo riesgo fue ejecutada y verificada.',
+          );
           this.remediationBusyId.set(null);
           this.loadPendingRemediations();
         },
-        error: () => {
-          this.error.set('No fue posible proponer la remediación.');
+        error: (error) => {
+          this.error.set(problemMessage(error, 'No fue posible proponer la remediación.'));
           this.remediationBusyId.set(null);
         },
       });
@@ -218,6 +250,8 @@ export class TicketsPage implements OnInit {
   protected decide(remediation: Remediation, approved: boolean): void {
     if (this.remediationBusyId()) return;
     this.remediationBusyId.set(remediation.id);
+    this.error.set(null);
+    this.success.set(null);
     this.api
       .decideRemediation(remediation.id, {
         approved,
@@ -236,10 +270,15 @@ export class TicketsPage implements OnInit {
           this.pendingRemediations.update((items) =>
             items.filter((item) => item.id !== updated.id),
           );
+          this.success.set(
+            approved
+              ? 'La aprobación fue registrada y la remediación fue procesada.'
+              : 'La remediación fue rechazada de forma segura.',
+          );
           this.remediationBusyId.set(null);
         },
-        error: () => {
-          this.error.set('No fue posible registrar la decisión.');
+        error: (error) => {
+          this.error.set(problemMessage(error, 'No fue posible registrar la decisión.'));
           this.remediationBusyId.set(null);
         },
       });
@@ -248,15 +287,18 @@ export class TicketsPage implements OnInit {
   protected resolve(ticketId: string): void {
     if (this.remediationBusyId()) return;
     this.remediationBusyId.set(ticketId);
+    this.error.set(null);
+    this.success.set(null);
     this.api
       .resolve(ticketId, 'Remediación ejecutada y verificada desde la consola')
       .subscribe({
         next: () => {
           this.updateTicketStatus(ticketId, 'RESOLVED');
+          this.success.set('El ticket fue marcado como resuelto después de la verificación.');
           this.remediationBusyId.set(null);
         },
-        error: () => {
-          this.error.set('No fue posible resolver el ticket.');
+        error: (error) => {
+          this.error.set(problemMessage(error, 'No fue posible resolver el ticket.'));
           this.remediationBusyId.set(null);
         },
       });
@@ -269,7 +311,8 @@ export class TicketsPage implements OnInit {
           ...current,
           [ticketId]: events,
         })),
-      error: () => this.error.set('No fue posible cargar la línea de tiempo.'),
+      error: (error) =>
+        this.error.set(problemMessage(error, 'No fue posible cargar la línea de tiempo.')),
     });
   }
 
@@ -284,6 +327,8 @@ export class TicketsPage implements OnInit {
   private changeLifecycle(ticketId: string, action: 'close' | 'reopen'): void {
     if (this.lifecycleBusyId()) return;
     this.lifecycleBusyId.set(ticketId);
+    this.error.set(null);
+    this.success.set(null);
     const input = {
       actorId: 'support-demo',
       reason:
@@ -301,11 +346,16 @@ export class TicketsPage implements OnInit {
     request.subscribe({
       next: (result) => {
         this.updateTicketStatus(ticketId, result.status);
+        this.success.set(
+          action === 'close'
+            ? 'El ticket fue cerrado correctamente.'
+            : 'El ticket fue reabierto para continuar la atención.',
+        );
         this.lifecycleBusyId.set(null);
         this.loadTimeline(ticketId);
       },
-      error: () => {
-        this.error.set(`No fue posible ${action === 'close' ? 'cerrar' : 'reabrir'} el ticket.`);
+      error: (error) => {
+        this.error.set(problemMessage(error, `No fue posible ${action === 'close' ? 'cerrar' : 'reabrir'} el ticket.`));
         this.lifecycleBusyId.set(null);
       },
     });
@@ -314,7 +364,8 @@ export class TicketsPage implements OnInit {
   private loadPendingRemediations(): void {
     this.api.pendingRemediations().subscribe({
       next: (items) => this.pendingRemediations.set(items),
-      error: () => this.error.set('No fue posible cargar las aprobaciones.'),
+      error: (error) =>
+        this.error.set(problemMessage(error, 'No fue posible cargar las aprobaciones.')),
     });
   }
 
@@ -325,4 +376,23 @@ export class TicketsPage implements OnInit {
       ),
     );
   }
+
+  private loadCapabilities(ticketId: string): void {
+    this.api.capabilities(ticketId).subscribe({
+      next: (capabilities) =>
+        this.capabilities.update((current) => ({
+          ...current,
+          [ticketId]: capabilities,
+        })),
+      error: () => undefined,
+    });
+  }
+
+  protected readonly statusMessage = statusMessage;
+  protected readonly diagnosticMessage = diagnosticMessage;
+  protected readonly recommendationMessage = recommendationMessage;
+  protected readonly remediationMessage = remediationMessage;
+  protected readonly remediationActionMessage = remediationActionMessage;
+  protected readonly categoryMessage = categoryMessage;
+  protected readonly guidanceMessage = guidanceMessage;
 }

@@ -10,6 +10,7 @@ import type {
   SupportCategory,
   TriageImpact,
   TriageUrgency,
+  TriageEntities,
 } from '../../application/ports/language-model.port.js';
 import type { TicketPriority } from '../../domain/tickets/priority-policy.js';
 import type { PrismaService } from './prisma.service.js';
@@ -42,7 +43,7 @@ export class PrismaClassificationRepository
       impact: record.impact as TriageImpact,
       urgency: record.urgency as TriageUrgency,
       priority: record.priority as TicketPriority,
-      entities: record.entities as Record<string, string>,
+      entities: record.entities as TriageEntities,
       missingInformation: record.missingInformation as string[],
       nextAction: record.nextAction as TriageNextAction,
       reason: record.reason as TriageReason,

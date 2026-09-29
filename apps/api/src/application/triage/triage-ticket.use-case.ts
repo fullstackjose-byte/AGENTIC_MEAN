@@ -14,6 +14,10 @@ import {
   NOOP_AUDIT_EVENT_REPOSITORY,
   type AuditEventRepository,
 } from '../../domain/audit/audit-event.repository.js';
+import {
+  buildTicketCapabilities,
+  type TicketCapabilities,
+} from '../../domain/triage/ticket-capabilities.js';
 
 export interface TriageDependencies {
   nextId(): string;
@@ -22,6 +26,7 @@ export interface TriageDependencies {
 
 export interface TriageResult extends TicketClassification {
   ticketStatus: TicketStatus;
+  capabilities: TicketCapabilities;
 }
 
 export class TriageTicketUseCase {
@@ -47,13 +52,22 @@ export class TriageTicketUseCase {
       urgency: output.urgency,
     });
 
-    let nextAction: TriageNextAction = 'HANDOFF_DIAGNOSTIC';
-    let reason: TriageReason = 'SUPPORTED_AND_COMPLETE';
+    const vpnDiagnosticSupported =
+      output.category === 'INFRASTRUCTURE_SOFTWARE' &&
+      output.subcategory === 'VPN' &&
+      output.confidence >= 0.8 &&
+      output.missingInformation.length === 0;
+    let nextAction: TriageNextAction = vpnDiagnosticSupported
+      ? 'HANDOFF_DIAGNOSTIC'
+      : 'ESCALATE_HUMAN';
+    let reason: TriageReason = vpnDiagnosticSupported
+      ? 'SUPPORTED_AND_COMPLETE'
+      : 'NO_AUTOMATED_DIAGNOSTIC';
     if (priority === 'P1') {
       nextAction = 'ESCALATE_HUMAN';
       reason = 'CRITICAL_PRIORITY';
     } else if (
-      output.confidence < 0.75 ||
+      output.confidence < 0.8 ||
       output.category === 'OTHER' ||
       output.missingInformation.length > 0
     ) {
@@ -91,7 +105,11 @@ export class TriageTicketUseCase {
       },
       createdAt: this.dependencies.now(),
     });
-    return { ...classification, ticketStatus: updatedTicket.status };
+    return {
+      ...classification,
+      ticketStatus: updatedTicket.status,
+      capabilities: buildTicketCapabilities(classification),
+    };
   }
 
   private validateOutput(output: Awaited<ReturnType<LanguageModelPort['classifyTicket']>>): void {
@@ -100,7 +118,9 @@ export class TriageTicketUseCase {
       output.confidence < 0 ||
       output.confidence > 1 ||
       !output.subcategory.trim() ||
-      !Array.isArray(output.missingInformation)
+      !Array.isArray(output.missingInformation) ||
+      !output.entities ||
+      typeof output.entities !== 'object'
     ) {
       throw new Error('Invalid structured triage output');
     }

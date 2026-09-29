@@ -43,7 +43,11 @@ describe('TriageTicketUseCase', () => {
       impact: 'SINGLE_USER',
       urgency: 'MEDIUM',
       confidence: 0.94,
-      entities: { service: 'corporate-vpn' },
+      entities: {
+        affectedUser: 'user-123',
+        impactedService: 'corporate-vpn',
+        businessCriticality: 'MEDIUM',
+      },
       missingInformation: [],
     });
     const useCase = new TriageTicketUseCase(
@@ -102,7 +106,11 @@ describe('TriageTicketUseCase', () => {
         impact: 'WIDESPREAD',
         urgency: 'HIGH',
         confidence: 0.98,
-        entities: { service: 'corporate-vpn' },
+        entities: {
+          affectedUser: 'user-123',
+          impactedService: 'corporate-vpn',
+          businessCriticality: 'HIGH',
+        },
         missingInformation: [],
       }),
       dependencies,
@@ -115,4 +123,34 @@ describe('TriageTicketUseCase', () => {
       ticketStatus: 'ESCALATED',
     });
   });
+
+  it.each(['ACCESS_IDENTITY', 'PROVISIONING_PERMISSIONS'] as const)(
+    'escalates %s to a human when no safe automated diagnostic exists',
+    async (category) => {
+      const ticketRepository = new InMemoryTicketRepository([newTicket()]);
+      const useCase = new TriageTicketUseCase(
+        ticketRepository,
+        new InMemoryClassificationRepository(),
+        new FakeLanguageModel({
+          category,
+          subcategory: 'SUPPORTED_BUT_MANUAL',
+          impact: 'SINGLE_USER',
+          urgency: 'MEDIUM',
+          confidence: 0.94,
+          entities: {
+            affectedUser: 'user-123',
+            impactedService: 'identity-or-access',
+            businessCriticality: 'MEDIUM',
+          },
+          missingInformation: [],
+        }),
+        dependencies,
+      );
+      await expect(useCase.execute(newTicket().id)).resolves.toMatchObject({
+        nextAction: 'ESCALATE_HUMAN',
+        reason: 'NO_AUTOMATED_DIAGNOSTIC',
+        ticketStatus: 'ESCALATED',
+      });
+    },
+  );
 });

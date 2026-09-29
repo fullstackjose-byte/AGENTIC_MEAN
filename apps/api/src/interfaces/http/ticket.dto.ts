@@ -11,7 +11,6 @@ export class CreateTicketDto {
   @ApiProperty({ example: 'usuario-demo' })
   requesterId!: string;
 }
-
 export class StartVpnDiagnosticDto {
   @ApiProperty({ enum: ['WINDOWS', 'MACOS', 'LINUX'], example: 'WINDOWS' })
   operatingSystem!: OperatingSystem;
@@ -58,4 +57,95 @@ export class ApprovalDecisionDto {
 export class TicketLifecycleDto {
   @ApiProperty({ example: 'El usuario confirmó que el servicio funciona' })
   reason!: string;
+}
+
+export class TriageEntitiesDto {
+  @ApiProperty({ type: String, required: false, example: 'usuario-demo' })
+  affectedUser?: string;
+
+  @ApiProperty({ type: String, required: false, example: 'corporate-vpn' })
+  impactedService?: string;
+
+  @ApiProperty({ type: String, required: false, enum: ['LOW', 'MEDIUM', 'HIGH'] })
+  businessCriticality?: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+
+export class TicketClassificationDto {
+  @ApiProperty({ type: String, format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ type: String, format: 'uuid' })
+  ticketId!: string;
+
+  @ApiProperty({
+    type: String,
+    enum: ['ACCESS_IDENTITY', 'INFRASTRUCTURE_SOFTWARE', 'PROVISIONING_PERMISSIONS', 'OTHER'],
+  })
+  category!: string;
+
+  @ApiProperty({ type: String, example: 'VPN' })
+  subcategory!: string;
+
+  @ApiProperty({ type: String, enum: ['SINGLE_USER', 'MULTIPLE_USERS', 'WIDESPREAD'] })
+  impact!: string;
+
+  @ApiProperty({ type: String, enum: ['LOW', 'MEDIUM', 'HIGH'] })
+  urgency!: string;
+
+  @ApiProperty({ type: String, enum: ['P1', 'P2', 'P3', 'P4'] })
+  priority!: string;
+
+  @ApiProperty({ type: Number, minimum: 0, maximum: 1, example: 0.94 })
+  confidence!: number;
+
+  @ApiProperty({ type: TriageEntitiesDto })
+  entities!: TriageEntitiesDto;
+
+  @ApiProperty({ type: [String], example: [] })
+  missingInformation!: string[];
+
+  @ApiProperty({ type: String, enum: ['HANDOFF_DIAGNOSTIC', 'ESCALATE_HUMAN'] })
+  nextAction!: string;
+
+  @ApiProperty({
+    type: String,
+    enum: [
+      'SUPPORTED_AND_COMPLETE',
+      'LOW_CONFIDENCE_OR_UNSUPPORTED',
+      'NO_AUTOMATED_DIAGNOSTIC',
+      'CRITICAL_PRIORITY',
+    ],
+  })
+  reason!: string;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  createdAt!: Date;
+}
+
+export class TicketCapabilitiesDto {
+  @ApiProperty({ type: TicketClassificationDto })
+  classification!: TicketClassificationDto;
+
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    enum: ['RUN_VPN_DIAGNOSTIC', 'REQUEST_INFORMATION', 'ESCALATE_HUMAN'],
+  })
+  allowedActions!: string[];
+
+  @ApiProperty({
+    type: String,
+    enum: [
+      'VPN_DIAGNOSTIC_AVAILABLE',
+      'INFORMATION_REQUIRED',
+      'IDENTITY_REQUIRES_HUMAN',
+      'PROVISIONING_REQUIRES_HUMAN',
+      'UNSUPPORTED_REQUIRES_HUMAN',
+      'CRITICAL_REQUIRES_HUMAN',
+    ],
+  })
+  guidanceCode!: string;
+
+  @ApiProperty({ type: String, example: 'Objetivo de primera respuesta: 4 horas.' })
+  slaExpectation!: string;
 }
