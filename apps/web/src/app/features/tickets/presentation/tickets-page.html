@@ -206,11 +206,21 @@
             }
           </article>
         }
-        @if (hasNextPage()) {
-          <button type="button" class="secondary load-more" [disabled]="loading()" (click)="loadMore()">
-            {{ loading() ? 'Cargando...' : 'Cargar más' }}
-          </button>
-        }
+        <nav class="pagination" aria-label="Paginación de solicitudes">
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="currentPage() === 1 || loading()"
+            (click)="previousPage()"
+          >Anterior</button>
+          <span aria-live="polite">Página {{ currentPage() }}</span>
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="!hasNextPage() || loading()"
+            (click)="nextPage()"
+          >Siguiente</button>
+        </nav>
       }
     </div>
   </div>

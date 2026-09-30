@@ -53,7 +53,10 @@ export class TicketsPage implements OnInit {
   protected readonly capabilities = signal<Record<string, TicketCapabilities>>({});
   protected readonly nextCursor = signal<string | null>(null);
   protected readonly hasNextPage = signal(false);
-  private readonly filters = signal<TicketFilters>({ limit: 20 });
+  protected readonly currentPage = signal(1);
+  private readonly pageSize = 3;
+  private readonly pageCursors = signal<Array<string | undefined>>([undefined]);
+  private readonly filters = signal<TicketFilters>({ limit: this.pageSize });
 
   protected readonly form = new FormGroup({
     subject: new FormControl('', {
@@ -75,17 +78,15 @@ export class TicketsPage implements OnInit {
     this.loadPendingRemediations();
   }
 
-  protected load(append = false): void {
+  protected load(cursor = this.pageCursors()[this.currentPage() - 1]): void {
     this.loading.set(true);
     this.error.set(null);
     this.api.list({
       ...this.filters(),
-      cursor: append ? this.nextCursor() ?? undefined : undefined,
+      cursor,
     }).subscribe({
       next: (connection) => {
-        this.tickets.update((current) =>
-          append ? [...current, ...connection.items] : connection.items,
-        );
+        this.tickets.set(connection.items);
         this.nextCursor.set(connection.pageInfo.nextCursor);
         this.hasNextPage.set(connection.pageInfo.hasNextPage);
         for (const ticket of connection.items) {
@@ -102,16 +103,30 @@ export class TicketsPage implements OnInit {
 
   protected applyFilters(search: string, status: string, priority: string): void {
     this.filters.set({
-      limit: 20,
+      limit: this.pageSize,
       q: search.trim() || undefined,
       status: (status || undefined) as TicketStatus | undefined,
       priority: (priority || undefined) as TicketPriority | undefined,
     });
+    this.resetPagination();
     this.load();
   }
 
-  protected loadMore(): void {
-    if (this.hasNextPage() && !this.loading()) this.load(true);
+  protected nextPage(): void {
+    const cursor = this.nextCursor();
+    if (!cursor || this.loading()) return;
+    this.pageCursors.update((cursors) => [
+      ...cursors.slice(0, this.currentPage()),
+      cursor,
+    ]);
+    this.currentPage.update((page) => page + 1);
+    this.load(cursor);
+  }
+
+  protected previousPage(): void {
+    if (this.currentPage() === 1 || this.loading()) return;
+    this.currentPage.update((page) => page - 1);
+    this.load(this.pageCursors()[this.currentPage() - 1]);
   }
 
   protected submit(): void {
@@ -124,11 +139,12 @@ export class TicketsPage implements OnInit {
     this.success.set(null);
     this.api.create(this.form.getRawValue()).subscribe({
       next: (ticket) => {
-        this.tickets.update((tickets) => [ticket, ...tickets]);
         this.form.controls.subject.reset('');
         this.form.controls.description.reset('');
         this.saving.set(false);
         this.success.set(`El ticket ${ticket.number} fue creado correctamente.`);
+        this.resetPagination();
+        this.load();
       },
       error: (error) => {
         this.error.set(problemMessage(error, 'No fue posible crear el ticket.'));
@@ -386,6 +402,13 @@ export class TicketsPage implements OnInit {
         })),
       error: () => undefined,
     });
+  }
+
+  private resetPagination(): void {
+    this.currentPage.set(1);
+    this.pageCursors.set([undefined]);
+    this.nextCursor.set(null);
+    this.hasNextPage.set(false);
   }
 
   protected readonly statusMessage = statusMessage;

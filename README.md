@@ -91,3 +91,5 @@ Rutas implementadas:
 - `POST /api/v1/tickets/:id/reopen`
 
 Consulta [REQUERIMIENTOS_TECNICOS.md](./REQUERIMIENTOS_TECNICOS.md) para la arquitectura, los requisitos y el alcance completo.
+
+Las decisiones del formulario compacto y la paginación están documentadas en [UX_PAGINACION_TICKETS.md](./UX_PAGINACION_TICKETS.md).

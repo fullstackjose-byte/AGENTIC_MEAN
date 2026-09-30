@@ -100,9 +100,18 @@ describe('TicketsPage', () => {
   });
 
   it('keeps the ticket list visible while showing a success message', async () => {
+    let created = false;
+    const createdTicket = {
+      ...ticket,
+      id: 'ticket-success',
+      number: 'TCK-2026-SUCCESS',
+    };
     const api = {
       list: () =>
-        of({ items: [ticket], pageInfo: { nextCursor: null, hasNextPage: false } }),
+        of({
+          items: created ? [createdTicket, ticket] : [ticket],
+          pageInfo: { nextCursor: null, hasNextPage: false },
+        }),
       pendingRemediations: () => of([]),
       capabilities: () =>
         of(
@@ -113,8 +122,10 @@ describe('TicketsPage', () => {
             'VPN_DIAGNOSTIC_AVAILABLE',
           ),
         ),
-      create: () =>
-        of({ ...ticket, id: 'ticket-success', number: 'TCK-2026-SUCCESS' }),
+      create: () => {
+        created = true;
+        return of(createdTicket);
+      },
     };
     await TestBed.configureTestingModule({
       imports: [TicketsPage],
@@ -138,5 +149,56 @@ describe('TicketsPage', () => {
     expect(content).toContain('fue creado correctamente');
     expect(content).toContain('TCK-2026-SUCCESS');
     expect(content).toContain('TCK-2026-000001');
+  });
+
+  it('replaces the visible page when navigating forward and backward', async () => {
+    const secondTicket: Ticket = {
+      ...ticket,
+      id: 'ticket-2',
+      number: 'TCK-2026-000002',
+      subject: 'Segunda página',
+      status: 'NEW',
+    };
+    const receivedCursors: Array<string | undefined> = [];
+    const api = {
+      list: (filters: { cursor?: string }) => {
+        receivedCursors.push(filters.cursor);
+        return filters.cursor === 'page-2'
+          ? of({ items: [secondTicket], pageInfo: { nextCursor: null, hasNextPage: false } })
+          : of({ items: [ticket], pageInfo: { nextCursor: 'page-2', hasNextPage: true } });
+      },
+      pendingRemediations: () => of([]),
+      capabilities: () =>
+        of(
+          capabilities(
+            'INFRASTRUCTURE_SOFTWARE',
+            'VPN',
+            ['RUN_VPN_DIAGNOSTIC'],
+            'VPN_DIAGNOSTIC_AVAILABLE',
+          ),
+        ),
+    };
+    await TestBed.configureTestingModule({
+      imports: [TicketsPage],
+      providers: [{ provide: TicketsApiService, useValue: api }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TicketsPage);
+    fixture.detectChanges();
+
+    const next = fixture.nativeElement.querySelector(
+      '[aria-label="Paginación de solicitudes"] button:last-child',
+    ) as HTMLButtonElement;
+    next.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Segunda página');
+    expect(fixture.nativeElement.textContent).not.toContain('TCK-2026-000001');
+
+    const previous = fixture.nativeElement.querySelector(
+      '[aria-label="Paginación de solicitudes"] button:first-child',
+    ) as HTMLButtonElement;
+    previous.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('TCK-2026-000001');
+    expect(receivedCursors).toEqual([undefined, 'page-2', undefined]);
   });
 });
