@@ -7,12 +7,21 @@ import type {
   TriageModelOutput,
 } from '../ports/language-model.port.js';
 import { TriageTicketUseCase } from './triage-ticket.use-case.js';
+import { InMemoryAuditEventRepository } from '../../infrastructure/persistence/in-memory-audit-event.repository.js';
 
 class FakeLanguageModel implements LanguageModelPort {
   constructor(private readonly output: TriageModelOutput) {}
 
   async classifyTicket(): Promise<TriageModelOutput> {
     return this.output;
+  }
+}
+
+class FailingLanguageModel implements LanguageModelPort {
+  classifyTicket(): Promise<TriageModelOutput> {
+    return Promise.reject(
+      new Error('raw provider failure with ana@example.com'),
+    );
   }
 }
 
@@ -64,8 +73,12 @@ describe('TriageTicketUseCase', () => {
       nextAction: 'HANDOFF_DIAGNOSTIC',
       ticketStatus: 'CLASSIFIED',
     });
-    await expect(classificationRepository.findByTicketId(newTicket().id)).resolves.toHaveLength(1);
-    await expect(ticketRepository.findById(newTicket().id)).resolves.toMatchObject({
+    await expect(
+      classificationRepository.findByTicketId(newTicket().id),
+    ).resolves.toHaveLength(1);
+    await expect(
+      ticketRepository.findById(newTicket().id),
+    ).resolves.toMatchObject({
       status: 'CLASSIFIED',
       priority: 'P3',
     });
@@ -96,7 +109,9 @@ describe('TriageTicketUseCase', () => {
   });
 
   it('escalates P1 even when the model confidence is high', async () => {
-    const ticketRepository = new InMemoryTicketRepository([newTicket('La VPN está caída para toda la empresa')]);
+    const ticketRepository = new InMemoryTicketRepository([
+      newTicket('La VPN está caída para toda la empresa'),
+    ]);
     const useCase = new TriageTicketUseCase(
       ticketRepository,
       new InMemoryClassificationRepository(),
@@ -153,4 +168,51 @@ describe('TriageTicketUseCase', () => {
       });
     },
   );
+
+  it('canonicalizes affectedUser and sanitizes model-provided text', async () => {
+    const useCase = new TriageTicketUseCase(
+      new InMemoryTicketRepository([newTicket()]),
+      new InMemoryClassificationRepository(),
+      new FakeLanguageModel({
+        category: 'INFRASTRUCTURE_SOFTWARE',
+        subcategory: 'VPN ana@example.com',
+        impact: 'SINGLE_USER',
+        urgency: 'MEDIUM',
+        confidence: 0.94,
+        entities: {
+          affectedUser: 'ana@example.com',
+          impactedService: 'VPN 10.0.0.8',
+          businessCriticality: 'MEDIUM',
+        },
+        missingInformation: [],
+      }),
+      dependencies,
+    );
+    const result = await useCase.execute(newTicket().id);
+    expect(result.entities.affectedUser).toBe('user-123');
+    expect(JSON.stringify(result)).not.toContain('ana@example.com');
+    expect(result.entities.impactedService).toContain('[PRIVATE_IP_REDACTED]');
+  });
+
+  it('safely escalates provider failures with fixed sanitized evidence', async () => {
+    const audit = new InMemoryAuditEventRepository();
+    const useCase = new TriageTicketUseCase(
+      new InMemoryTicketRepository([newTicket()]),
+      new InMemoryClassificationRepository(),
+      new FailingLanguageModel(),
+      dependencies,
+      audit,
+    );
+    await expect(useCase.execute(newTicket().id)).resolves.toMatchObject({
+      category: 'OTHER',
+      confidence: 0,
+      ticketStatus: 'ESCALATED',
+    });
+    const events = await audit.findByTicketId(newTicket().id);
+    expect(events[0]).toMatchObject({
+      type: 'MODEL_CLASSIFICATION_FAILED',
+      metadata: { reason: 'INVALID_OR_UNAVAILABLE_MODEL_OUTPUT' },
+    });
+    expect(JSON.stringify(events)).not.toContain('ana@example.com');
+  });
 });

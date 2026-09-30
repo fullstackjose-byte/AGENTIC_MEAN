@@ -149,7 +149,7 @@ describe('AppController (e2e)', () => {
       .send({
         subject: 'VPN no conecta',
         description: 'La conexión falla desde esta mañana',
-        requesterId: 'user-123',
+        requesterId: 'attempted-spoof',
       })
       .expect(201);
 
@@ -157,14 +157,14 @@ describe('AppController (e2e)', () => {
       subject: 'VPN no conecta',
       status: 'NEW',
       priority: 'P4',
+      requesterId: 'user-123',
     });
 
     const listed = await asRole(
       request(app.getHttpServer()).get('/api/v1/tickets'),
       'END_USER',
       'user-123',
-    )
-      .expect(200);
+    ).expect(200);
     expect(listed.body.items).toHaveLength(1);
     expect(listed.body.pageInfo).toEqual({
       hasNextPage: false,
@@ -186,8 +186,7 @@ describe('AppController (e2e)', () => {
       request(app.getHttpServer()).get(`/api/v1/tickets/${created.body.id}`),
       'END_USER',
       'user-123',
-    )
-      .expect(200);
+    ).expect(200);
     expect(found.body.id).toBe(created.body.id);
 
     await asRole(
@@ -202,8 +201,7 @@ describe('AppController (e2e)', () => {
       ),
       'SUPPORT_AGENT',
       'support-1',
-    )
-      .expect(201);
+    ).expect(201);
     expect(triage.body).toMatchObject({
       ticketId: created.body.id,
       category: 'INFRASTRUCTURE_SOFTWARE',
@@ -216,6 +214,18 @@ describe('AppController (e2e)', () => {
         allowedActions: ['RUN_VPN_DIAGNOSTIC'],
         guidanceCode: 'VPN_DIAGNOSTIC_AVAILABLE',
       },
+    });
+
+    const invalidTransition = await asRole(
+      request(app.getHttpServer()).post(
+        `/api/v1/tickets/${created.body.id}/classifications`,
+      ),
+      'SUPPORT_AGENT',
+      'support-1',
+    ).expect(409);
+    expect(invalidTransition.body).toMatchObject({
+      status: 409,
+      title: 'Conflict',
     });
 
     const capabilities = await asRole(
@@ -285,8 +295,7 @@ describe('AppController (e2e)', () => {
       ),
       'AUDITOR',
       'auditor-1',
-    )
-      .expect(200);
+    ).expect(200);
     expect(timeline.body.map((event: { type: string }) => event.type)).toEqual([
       'TICKET_CREATED',
       'TICKET_CLASSIFIED',
@@ -331,8 +340,7 @@ describe('AppController (e2e)', () => {
       ),
       'SUPPORT_AGENT',
       'support-1',
-    )
-      .expect(201);
+    ).expect(201);
     await asRole(
       request(app.getHttpServer()).post(
         `/api/v1/tickets/${created.body.id}/diagnostics`,
@@ -361,8 +369,7 @@ describe('AppController (e2e)', () => {
       request(app.getHttpServer()).get('/api/v1/remediations/pending'),
       'APPROVER',
       'approver-1',
-    )
-      .expect(200);
+    ).expect(200);
     expect(pending.body).toHaveLength(1);
 
     const approved = await asRole(
@@ -386,41 +393,52 @@ describe('AppController (e2e)', () => {
   });
 
   it.each([
-    ['Cuenta bloqueada', 'Mi cuenta no permite iniciar sesión', 'ACCESS_IDENTITY'],
-    ['Necesito una licencia', 'Solicito acceso a un repositorio', 'PROVISIONING_PERMISSIONS'],
-  ])('never offers VPN diagnosis for %s', async (subject, description, category) => {
-    const created = await asRole(
-      request(app.getHttpServer()).post('/api/v1/tickets'),
-      'END_USER',
-      'typology-user',
-    )
-      .send({ subject, description, requesterId: 'typology-user' })
-      .expect(201);
-    const triage = await asRole(
-      request(app.getHttpServer()).post(
-        `/api/v1/tickets/${created.body.id}/classifications`,
-      ),
-      'SUPPORT_AGENT',
-      'support-1',
-    ).expect(201);
-    expect(triage.body).toMatchObject({
-      category,
-      ticketStatus: 'ESCALATED',
-      nextAction: 'ESCALATE_HUMAN',
-    });
-    expect(triage.body.capabilities.allowedActions).not.toContain(
-      'RUN_VPN_DIAGNOSTIC',
-    );
-    await asRole(
-      request(app.getHttpServer()).post(
-        `/api/v1/tickets/${created.body.id}/diagnostics`,
-      ),
-      'SUPPORT_AGENT',
-      'support-1',
-    )
-      .send({ operatingSystem: 'WINDOWS', errorMessage: 'No conecta' })
-      .expect(400);
-  });
+    [
+      'Cuenta bloqueada',
+      'Mi cuenta no permite iniciar sesión',
+      'ACCESS_IDENTITY',
+    ],
+    [
+      'Necesito una licencia',
+      'Solicito acceso a un repositorio',
+      'PROVISIONING_PERMISSIONS',
+    ],
+  ])(
+    'never offers VPN diagnosis for %s',
+    async (subject, description, category) => {
+      const created = await asRole(
+        request(app.getHttpServer()).post('/api/v1/tickets'),
+        'END_USER',
+        'typology-user',
+      )
+        .send({ subject, description, requesterId: 'typology-user' })
+        .expect(201);
+      const triage = await asRole(
+        request(app.getHttpServer()).post(
+          `/api/v1/tickets/${created.body.id}/classifications`,
+        ),
+        'SUPPORT_AGENT',
+        'support-1',
+      ).expect(201);
+      expect(triage.body).toMatchObject({
+        category,
+        ticketStatus: 'ESCALATED',
+        nextAction: 'ESCALATE_HUMAN',
+      });
+      expect(triage.body.capabilities.allowedActions).not.toContain(
+        'RUN_VPN_DIAGNOSTIC',
+      );
+      await asRole(
+        request(app.getHttpServer()).post(
+          `/api/v1/tickets/${created.body.id}/diagnostics`,
+        ),
+        'SUPPORT_AGENT',
+        'support-1',
+      )
+        .send({ operatingSystem: 'WINDOWS', errorMessage: 'No conecta' })
+        .expect(400);
+    },
+  );
 
   afterEach(async () => {
     await app.close();

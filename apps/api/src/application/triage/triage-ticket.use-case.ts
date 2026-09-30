@@ -18,6 +18,8 @@ import {
   buildTicketCapabilities,
   type TicketCapabilities,
 } from '../../domain/triage/ticket-capabilities.js';
+import type { TriageModelOutput } from '../ports/language-model.port.js';
+import { redactSensitiveData } from '../../domain/security/secret-redactor.js';
 
 export interface TriageDependencies {
   nextId(): string;
@@ -45,8 +47,24 @@ export class TriageTicketUseCase {
     const ticket = await this.tickets.findById(ticketId);
     if (!ticket) throw new TicketNotFoundError(ticketId);
 
-    const output = await this.model.classifyTicket(ticket);
-    this.validateOutput(output);
+    let output: TriageModelOutput;
+    let modelFailed = false;
+    try {
+      output = await this.model.classifyTicket(ticket);
+      this.validateOutput(output);
+      output = this.sanitizeOutput(output, ticket.requesterId);
+    } catch {
+      modelFailed = true;
+      output = {
+        category: 'OTHER',
+        subcategory: 'UNDETERMINED',
+        impact: 'SINGLE_USER',
+        urgency: 'MEDIUM',
+        confidence: 0,
+        entities: { affectedUser: ticket.requesterId },
+        missingInformation: ['impactedService', 'businessCriticality'],
+      };
+    }
     const priority = calculatePriority({
       impact: output.impact,
       urgency: output.urgency,
@@ -88,6 +106,19 @@ export class TriageTicketUseCase {
       priority,
       nextAction === 'ESCALATE_HUMAN',
     );
+    if (modelFailed) {
+      await this.audit.append({
+        id: this.dependencies.nextId(),
+        ticketId,
+        type: 'MODEL_CLASSIFICATION_FAILED',
+        actorId: 'triage-agent',
+        metadata: {
+          result: 'SAFE_ESCALATION',
+          reason: 'INVALID_OR_UNAVAILABLE_MODEL_OUTPUT',
+        },
+        createdAt: this.dependencies.now(),
+      });
+    }
     await this.classifications.save(classification);
     await this.tickets.save(updatedTicket);
     await this.audit.append({
@@ -112,7 +143,9 @@ export class TriageTicketUseCase {
     };
   }
 
-  private validateOutput(output: Awaited<ReturnType<LanguageModelPort['classifyTicket']>>): void {
+  private validateOutput(
+    output: Awaited<ReturnType<LanguageModelPort['classifyTicket']>>,
+  ): void {
     if (
       !Number.isFinite(output.confidence) ||
       output.confidence < 0 ||
@@ -120,9 +153,45 @@ export class TriageTicketUseCase {
       !output.subcategory.trim() ||
       !Array.isArray(output.missingInformation) ||
       !output.entities ||
-      typeof output.entities !== 'object'
+      typeof output.entities !== 'object' ||
+      ![
+        'ACCESS_IDENTITY',
+        'INFRASTRUCTURE_SOFTWARE',
+        'PROVISIONING_PERMISSIONS',
+        'OTHER',
+      ].includes(output.category) ||
+      !['SINGLE_USER', 'MULTIPLE_USERS', 'WIDESPREAD'].includes(
+        output.impact,
+      ) ||
+      !['LOW', 'MEDIUM', 'HIGH'].includes(output.urgency)
     ) {
       throw new Error('Invalid structured triage output');
     }
+  }
+
+  private sanitizeOutput(
+    output: TriageModelOutput,
+    requesterId: string,
+  ): TriageModelOutput {
+    return {
+      ...output,
+      subcategory: redactSensitiveData(output.subcategory).text,
+      entities: {
+        affectedUser: requesterId,
+        ...(output.entities.impactedService
+          ? {
+              impactedService: redactSensitiveData(
+                output.entities.impactedService,
+              ).text,
+            }
+          : {}),
+        ...(output.entities.businessCriticality
+          ? { businessCriticality: output.entities.businessCriticality }
+          : {}),
+      },
+      missingInformation: output.missingInformation.map(
+        (item) => redactSensitiveData(item).text,
+      ),
+    };
   }
 }

@@ -6,7 +6,9 @@ import { RequestContextService } from './request-context.service.js';
 
 describe('CorrelatedAuditEventRepository', () => {
   it('adds correlation and result while redacting secrets', async () => {
-    const append = vi.fn<(event: AuditEvent) => Promise<void>>().mockResolvedValue();
+    const append = vi
+      .fn<(event: AuditEvent) => Promise<void>>()
+      .mockResolvedValue();
     const repository: AuditEventRepository = {
       append,
       findByTicketId: vi.fn().mockResolvedValue([]),
@@ -23,7 +25,7 @@ describe('CorrelatedAuditEventRepository', () => {
         metadata: {
           ticketStatus: 'IN_DIAGNOSIS',
           token: 'secret-token',
-          detail: 'Authorization: Bearer top-secret',
+          detail: 'Authorization: Bearer top-secret for ana@example.com',
         },
         createdAt: new Date('2026-09-29T12:00:00.000Z'),
       }),
@@ -38,6 +40,11 @@ describe('CorrelatedAuditEventRepository', () => {
         }),
       }),
     );
-    expect(append.mock.calls[0]?.[0].metadata.detail).not.toContain('top-secret');
+    expect(append.mock.calls[0]?.[0].metadata.detail).not.toContain(
+      'top-secret',
+    );
+    expect(append.mock.calls[0]?.[0].metadata.detail).not.toContain(
+      'ana@example.com',
+    );
   });
 });

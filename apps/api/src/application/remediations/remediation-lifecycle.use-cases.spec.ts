@@ -7,7 +7,9 @@ import { ApproveRemediationUseCase } from './approve-remediation.use-case.js';
 import { ProposeRemediationUseCase } from './propose-remediation.use-case.js';
 import { ResolveTicketUseCase } from './resolve-ticket.use-case.js';
 
-const ticket = (status: 'IN_DIAGNOSIS' | 'PENDING_APPROVAL' | 'IN_REMEDIATION') =>
+const ticket = (
+  status: 'IN_DIAGNOSIS' | 'PENDING_APPROVAL' | 'IN_REMEDIATION',
+) =>
   Ticket.restore({
     id: '11111111-1111-4111-8111-111111111111',
     number: 'TCK-2026-000001',
@@ -161,6 +163,7 @@ describe('remediation lifecycle', () => {
     await expect(
       useCase.execute(ticket('IN_REMEDIATION').id, {
         resolutionSummary: 'Perfil VPN actualizado y conectividad verificada',
+        actorId: 'support-1',
       }),
     ).resolves.toMatchObject({ status: 'RESOLVED' });
   });

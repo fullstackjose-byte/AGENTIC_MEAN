@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { VpnDiagnosticPort, VpnDiagnosticInput } from '../ports/vpn-diagnostic.port.js';
+import type {
+  VpnDiagnosticPort,
+  VpnDiagnosticInput,
+} from '../ports/vpn-diagnostic.port.js';
 import type { TicketRepository } from '../../domain/tickets/ticket.repository.js';
 import type { ClassificationRepository } from '../../domain/triage/classification.repository.js';
 import type { DiagnosticRunRepository } from '../../domain/diagnostics/diagnostic-run.repository.js';
@@ -8,7 +11,7 @@ import type {
   DiagnosticRecommendation,
   DiagnosticResult,
 } from '../../domain/diagnostics/diagnostic-run.js';
-import { redactSecrets } from '../../domain/security/secret-redactor.js';
+import { redactSensitiveData } from '../../domain/security/secret-redactor.js';
 import { TicketNotFoundError } from '../tickets/get-ticket.use-case.js';
 import {
   NOOP_AUDIT_EVENT_REPOSITORY,
@@ -78,7 +81,7 @@ export class StartVpnDiagnosticUseCase {
       );
     }
 
-    const safeError = redactSecrets(input.errorMessage).text;
+    const safeError = redactSensitiveData(input.errorMessage).text;
     const evidence = await this.diagnostic.check({
       ...input,
       errorMessage: safeError,

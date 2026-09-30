@@ -7,7 +7,7 @@ import {
   NOOP_AUDIT_EVENT_REPOSITORY,
   type AuditEventRepository,
 } from '../../domain/audit/audit-event.repository.js';
-import { redactSecrets } from '../../domain/security/secret-redactor.js';
+import { redactSensitiveData } from '../../domain/security/secret-redactor.js';
 
 export class ResolveTicketUseCase {
   constructor(
@@ -20,9 +20,12 @@ export class ResolveTicketUseCase {
     private readonly audit: AuditEventRepository = NOOP_AUDIT_EVENT_REPOSITORY,
   ) {}
 
-  async execute(ticketId: string, input: { resolutionSummary: string }) {
-    if (!input.resolutionSummary.trim()) {
-      throw new Error('Resolution summary is required');
+  async execute(
+    ticketId: string,
+    input: { resolutionSummary: string; actorId: string },
+  ) {
+    if (!input.resolutionSummary.trim() || !input.actorId.trim()) {
+      throw new Error('Resolution summary and authorized actor are required');
     }
     const ticket = await this.tickets.findById(ticketId);
     if (!ticket) throw new TicketNotFoundError(ticketId);
@@ -31,9 +34,10 @@ export class ResolveTicketUseCase {
       (item) =>
         item.status === 'EXECUTED' && item.verificationStatus === 'PASSED',
     );
-    if (!verified) throw new Error('Successful remediation verification is required');
+    if (!verified)
+      throw new Error('Successful remediation verification is required');
 
-    const safeSummary = redactSecrets(input.resolutionSummary).text;
+    const safeSummary = redactSensitiveData(input.resolutionSummary).text;
     const updatedTicket = ticket.resolve();
     const resolvedAt = this.dependencies.now();
     await this.tickets.save(updatedTicket);
@@ -41,7 +45,7 @@ export class ResolveTicketUseCase {
       id: this.dependencies.nextId(),
       ticketId,
       type: 'TICKET_RESOLVED',
-      actorId: 'remediation-agent',
+      actorId: input.actorId,
       metadata: { summary: safeSummary },
       createdAt: resolvedAt,
     });

@@ -93,3 +93,43 @@ Rutas implementadas:
 Consulta [REQUERIMIENTOS_TECNICOS.md](./REQUERIMIENTOS_TECNICOS.md) para la arquitectura, los requisitos y el alcance completo.
 
 Las decisiones del formulario compacto y la paginación están documentadas en [UX_PAGINACION_TICKETS.md](./UX_PAGINACION_TICKETS.md).
+
+## Proveedor de clasificación
+
+### Modo reproducible (predeterminado)
+
+```dotenv
+LLM_PROVIDER=mock
+```
+
+Es offline, no requiere credenciales y es el modo usado por pruebas, `pnpm verify`, CI y **Reopen in Container**. El frontend consume el mismo contrato y no conoce el proveedor.
+
+### Modo OpenAI opcional
+
+Define estas variables en tu entorno local antes de abrir el contenedor; no las escribas en archivos versionados:
+
+```dotenv
+LLM_PROVIDER=openai
+OPENAI_API_KEY=<configurar-solo-en-el-entorno-local>
+OPENAI_MODEL=<modelo-habilitado-en-tu-cuenta>
+OPENAI_TIMEOUT_MS=10000
+```
+
+Al iniciar, la API falla de forma segura si falta la clave o el modelo. El adaptador usa Responses API con salida JSON estructurada, almacenamiento remoto desactivado (`store: false`), timeout y como máximo un reintento para errores transitorios. El dominio continúa calculando prioridad, SLA, capacidades, escalamiento y estado. Un fallo o salida inválida se transforma en escalamiento humano seguro sin exponer la respuesta cruda.
+
+La prueba real está fuera de `verify` y de CI normal. Puede generar consumo facturable y solo realiza una solicitud sintética, sin PostgreSQL:
+
+```powershell
+$env:RUN_OPENAI_SMOKE_TEST='true'
+corepack pnpm test:openai:smoke
+```
+
+Además deben existir `OPENAI_API_KEY` y `OPENAI_MODEL`. No ejecutes este comando para la verificación habitual.
+
+## Política de PII
+
+`requesterId` y `affectedUser` aceptan únicamente identificadores internos opacos. Para `END_USER`, el backend ignora el identificador enviado en el body y usa la identidad autenticada; el filtrado por propietario ocurre antes de paginar.
+
+Asunto, descripción, entradas diagnósticas, salida estructurada, logs y metadatos de auditoría se sanitizan antes de usarse. Se redactan correo, teléfono, identificadores personales etiquetados, IP privadas, contraseñas, tokens, Bearer y claves `sk-`. No se intenta detectar nombres propios para evitar falsos positivos; por eso ningún usuario debe escribir nombres o PII innecesaria. Los patrones de identificadores específicos pueden suministrarse al redactor mediante su parámetro de patrones adicionales.
+
+La sanitización no conserva una copia original. Los operadores reciben el contenido ya redactado mediante marcadores explícitos como `[EMAIL_REDACTED]`, `[PHONE_REDACTED]`, `[IDENTIFIER_REDACTED]`, `[PRIVATE_IP_REDACTED]` y `[REDACTED]`.

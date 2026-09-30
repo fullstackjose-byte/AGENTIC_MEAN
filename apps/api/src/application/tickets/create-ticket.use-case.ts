@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { redactSecrets } from '../../domain/security/secret-redactor.js';
+import {
+  assertOpaqueRequesterId,
+  redactSensitiveData,
+} from '../../domain/security/secret-redactor.js';
 import type { TicketRepository } from '../../domain/tickets/ticket.repository.js';
 import { Ticket } from '../../domain/tickets/ticket.js';
 import {
@@ -43,16 +46,19 @@ export class CreateTicketUseCase {
     if (!subject || !description || !requesterId) {
       throw new Error('subject, description and requesterId are required');
     }
+    assertOpaqueRequesterId(requesterId);
 
-    const redacted = redactSecrets(description);
+    const safeSubject = redactSensitiveData(subject);
+    const safeDescription = redactSensitiveData(description);
     const ticket = Ticket.create({
       id: this.dependencies.nextId(),
       number: this.dependencies.nextTicketNumber(),
-      subject,
-      description: redacted.text,
+      subject: safeSubject.text,
+      description: safeDescription.text,
       requesterId,
       createdAt: this.dependencies.now(),
-      containsRedactedData: redacted.redactionCount > 0,
+      containsRedactedData:
+        safeSubject.redactionCount + safeDescription.redactionCount > 0,
     });
     await this.repository.save(ticket);
     await this.audit.append({

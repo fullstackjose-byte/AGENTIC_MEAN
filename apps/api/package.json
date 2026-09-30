@@ -21,6 +21,7 @@
     "test:cov": "vitest run --coverage",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
+    "test:openai:smoke": "vitest run --config ./vitest.config.smoke.ts",
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy"
@@ -34,6 +35,7 @@
     "@prisma/client": "^7.10.0",
     "dotenv": "^18.0.4",
     "jose": "^6.2.12",
+    "openai": "^7.23.0",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"

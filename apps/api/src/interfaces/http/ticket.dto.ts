@@ -8,7 +8,12 @@ export class CreateTicketDto {
   @ApiProperty({ example: 'El cliente VPN muestra un error de conexión' })
   description!: string;
 
-  @ApiProperty({ example: 'usuario-demo' })
+  @ApiProperty({
+    example: 'usuario-demo',
+    description:
+      'Identificador interno opaco. Para END_USER se ignora este valor y se usa la identidad autenticada.',
+    pattern: '^[A-Za-z0-9][A-Za-z0-9._|:-]{2,119}$',
+  })
   requesterId!: string;
 }
 export class StartVpnDiagnosticDto {
@@ -36,7 +41,6 @@ export class ProposeRemediationDto {
     | 'REFRESH_VPN_PROFILE'
     | 'RESET_VPN_CONFIGURATION'
     | 'DISABLE_SECURITY_CONTROLS';
-
 }
 
 export class ResolveTicketDto {
@@ -66,7 +70,11 @@ export class TriageEntitiesDto {
   @ApiProperty({ type: String, required: false, example: 'corporate-vpn' })
   impactedService?: string;
 
-  @ApiProperty({ type: String, required: false, enum: ['LOW', 'MEDIUM', 'HIGH'] })
+  @ApiProperty({
+    type: String,
+    required: false,
+    enum: ['LOW', 'MEDIUM', 'HIGH'],
+  })
   businessCriticality?: 'LOW' | 'MEDIUM' | 'HIGH';
 }
 
@@ -79,14 +87,22 @@ export class TicketClassificationDto {
 
   @ApiProperty({
     type: String,
-    enum: ['ACCESS_IDENTITY', 'INFRASTRUCTURE_SOFTWARE', 'PROVISIONING_PERMISSIONS', 'OTHER'],
+    enum: [
+      'ACCESS_IDENTITY',
+      'INFRASTRUCTURE_SOFTWARE',
+      'PROVISIONING_PERMISSIONS',
+      'OTHER',
+    ],
   })
   category!: string;
 
   @ApiProperty({ type: String, example: 'VPN' })
   subcategory!: string;
 
-  @ApiProperty({ type: String, enum: ['SINGLE_USER', 'MULTIPLE_USERS', 'WIDESPREAD'] })
+  @ApiProperty({
+    type: String,
+    enum: ['SINGLE_USER', 'MULTIPLE_USERS', 'WIDESPREAD'],
+  })
   impact!: string;
 
   @ApiProperty({ type: String, enum: ['LOW', 'MEDIUM', 'HIGH'] })
@@ -146,6 +162,9 @@ export class TicketCapabilitiesDto {
   })
   guidanceCode!: string;
 
-  @ApiProperty({ type: String, example: 'Objetivo de primera respuesta: 4 horas.' })
+  @ApiProperty({
+    type: String,
+    example: 'Objetivo de primera respuesta: 4 horas.',
+  })
   slaExpectation!: string;
 }
