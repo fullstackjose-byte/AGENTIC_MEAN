@@ -2,9 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["ticketId", "operatingSystem", "errorMessage"],
+  "required": ["ticketId", "endpoint", "operatingSystem", "errorMessage"],
   "properties": {
     "ticketId": { "type": "string", "format": "uuid" },
+    "endpoint": {
+      "type": "string",
+      "enum": ["vpn.corporate.local"]
+    },
     "operatingSystem": {
       "type": "string",
       "enum": ["WINDOWS", "MACOS", "LINUX"]

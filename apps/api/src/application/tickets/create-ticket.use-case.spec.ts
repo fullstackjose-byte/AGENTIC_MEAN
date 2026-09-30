@@ -47,6 +47,38 @@ describe('CreateTicketUseCase', () => {
     expect(ticket.containsRedactedData).toBe(true);
   });
 
+  it('redacts PII from subject and description before persistence', async () => {
+    const repository = new InMemoryTicketRepository();
+    const useCase = new CreateTicketUseCase(repository, {
+      nextId: () => '33333333-3333-4333-8333-333333333333',
+      nextTicketNumber: () => 'TCK-2026-000003',
+      now: () => new Date('2026-09-29T15:00:00.000Z'),
+    });
+    const ticket = await useCase.execute({
+      subject: 'Correo ana@example.com',
+      description: 'Llámame al +57 310 555 1234 desde 192.168.1.20',
+      requesterId: 'user-safe',
+    });
+    expect(ticket.subject).toBe('Correo [EMAIL_REDACTED]');
+    expect(ticket.description).not.toMatch(/310|192\.168/);
+    expect(ticket.containsRedactedData).toBe(true);
+  });
+
+  it('rejects requester PII before persistence', async () => {
+    const repository = new InMemoryTicketRepository();
+    const useCase = new CreateTicketUseCase(repository);
+    await expect(
+      useCase.execute({
+        subject: 'VPN',
+        description: 'No conecta',
+        requesterId: 'person@example.com',
+      }),
+    ).rejects.toThrow('opaque');
+    await expect(repository.findPage({ limit: 10 })).resolves.toMatchObject({
+      items: [],
+    });
+  });
+
   it.each([
     ['', 'Descripción válida', 'user-1'],
     ['Asunto válido', '', 'user-1'],

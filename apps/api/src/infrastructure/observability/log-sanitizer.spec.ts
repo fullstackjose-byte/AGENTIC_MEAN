@@ -5,11 +5,18 @@ describe('sanitizeLogValue', () => {
     expect(
       sanitizeLogValue({
         authorization: 'Bearer abcdefghijk',
-        nested: { message: 'password=hunter2', apiKey: 'sk-secret' },
+        nested: {
+          message: 'password=hunter2 email ana@example.com ip 10.0.0.4',
+          apiKey: 'sk-secret',
+        },
       }),
     ).toEqual({
       authorization: '[REDACTED]',
-      nested: { message: 'password=[REDACTED]', apiKey: '[REDACTED]' },
+      nested: {
+        message:
+          'password=[REDACTED] email [EMAIL_REDACTED] ip [PRIVATE_IP_REDACTED]',
+        apiKey: '[REDACTED]',
+      },
     });
   });
 });

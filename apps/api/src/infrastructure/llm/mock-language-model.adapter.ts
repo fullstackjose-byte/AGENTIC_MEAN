@@ -10,7 +10,7 @@ import type { Ticket } from '../../domain/tickets/ticket.js';
 interface CategoryMatch {
   category: SupportCategory;
   subcategory: string;
-  service: string;
+  impactedService: string;
 }
 
 export class MockLanguageModelAdapter implements LanguageModelPort {
@@ -25,9 +25,15 @@ export class MockLanguageModelAdapter implements LanguageModelPort {
       urgency: this.detectUrgency(text),
       confidence: match ? 0.94 : 0.45,
       entities: match
-        ? { service: match.service }
-        : ({} as Record<string, string>),
-      missingInformation: match ? [] : ['service'],
+        ? {
+            affectedUser: ticket.requesterId,
+            impactedService: match.impactedService,
+            businessCriticality: this.detectUrgency(text),
+          }
+        : { affectedUser: ticket.requesterId },
+      missingInformation: match
+        ? []
+        : ['impactedService', 'businessCriticality'],
     });
   }
 
@@ -36,21 +42,21 @@ export class MockLanguageModelAdapter implements LanguageModelPort {
       return {
         category: 'INFRASTRUCTURE_SOFTWARE',
         subcategory: 'VPN',
-        service: 'corporate-vpn',
+        impactedService: 'corporate-vpn',
       };
     }
     if (includesAny(text, ['contrasena', 'password', 'cuenta', 'mfa'])) {
       return {
         category: 'ACCESS_IDENTITY',
         subcategory: 'IDENTITY_ACCESS',
-        service: 'identity-provider',
+        impactedService: 'identity-provider',
       };
     }
     if (includesAny(text, ['licencia', 'permiso', 'carpeta', 'repositorio'])) {
       return {
         category: 'PROVISIONING_PERMISSIONS',
         subcategory: 'ACCESS_REQUEST',
-        service: 'access-management',
+        impactedService: 'access-management',
       };
     }
     return undefined;

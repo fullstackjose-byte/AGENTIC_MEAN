@@ -26,7 +26,11 @@ describe('MockLanguageModelAdapter', () => {
       subcategory: 'VPN',
       impact: 'SINGLE_USER',
       confidence: 0.94,
-      entities: { service: 'corporate-vpn' },
+      entities: {
+        affectedUser: 'user-123',
+        impactedService: 'corporate-vpn',
+        businessCriticality: 'MEDIUM',
+      },
       missingInformation: [],
     });
   });
@@ -45,6 +49,16 @@ describe('MockLanguageModelAdapter', () => {
     });
   });
 
+  it.each([
+    ['Cuenta bloqueada', 'Mi cuenta no permite iniciar sesión', 'ACCESS_IDENTITY'],
+    ['Necesito una licencia', 'Solicito licencia para el repositorio', 'PROVISIONING_PERMISSIONS'],
+  ] as const)('classifies supported typologies without pretending they are VPN', async (subject, description, category) => {
+    const result = await adapter.classifyTicket(ticket(subject, description));
+    expect(result.category).toBe(category);
+    expect(result.subcategory).not.toBe('VPN');
+    expect(result.entities).toMatchObject({ affectedUser: 'user-123' });
+  });
+
   it('returns low confidence and missing information for unsupported requests', async () => {
     await expect(
       adapter.classifyTicket(
@@ -53,7 +67,7 @@ describe('MockLanguageModelAdapter', () => {
     ).resolves.toMatchObject({
       category: 'OTHER',
       confidence: 0.45,
-      missingInformation: ['service'],
+      missingInformation: ['impactedService', 'businessCriticality'],
     });
   });
 });

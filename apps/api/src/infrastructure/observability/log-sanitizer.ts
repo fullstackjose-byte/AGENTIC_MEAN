@@ -1,9 +1,9 @@
-import { redactSecrets } from '../../domain/security/secret-redactor.js';
+import { redactSensitiveData } from '../../domain/security/secret-redactor.js';
 
 const SENSITIVE_KEY = /password|token|authorization|cookie|secret|api[-_]?key/i;
 
 export function sanitizeLogValue(value: unknown): unknown {
-  if (typeof value === 'string') return redactSecrets(value).text;
+  if (typeof value === 'string') return redactSensitiveData(value).text;
   if (Array.isArray(value)) return value.map(sanitizeLogValue);
   if (!value || typeof value !== 'object') return value;
 

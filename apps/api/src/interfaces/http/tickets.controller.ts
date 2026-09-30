@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ConflictException,
   ForbiddenException,
   Get,
   Inject,
@@ -13,10 +14,13 @@ import {
 } from '@nestjs/common';
 import {
   ApiOperation,
+  ApiOkResponse,
+  ApiExtraModels,
   ApiParam,
   ApiQuery,
   ApiSecurity,
   ApiTags,
+  getSchemaPath,
 } from '@nestjs/swagger';
 import { CreateTicketUseCase } from '../../application/tickets/create-ticket.use-case.js';
 import {
@@ -38,6 +42,8 @@ import {
   ResolveTicketDto,
   StartVpnDiagnosticDto,
   TicketLifecycleDto,
+  TicketCapabilitiesDto,
+  TicketClassificationDto,
 } from './ticket.dto.js';
 import {
   ProhibitedRemediationError,
@@ -49,10 +55,16 @@ import { ReopenTicketUseCase } from '../../application/tickets/reopen-ticket.use
 import { GetTicketTimelineUseCase } from '../../application/tickets/get-ticket-timeline.use-case.js';
 import { Roles } from '../auth/auth.decorators.js';
 import type { AuthenticatedRequest } from '../auth/auth.types.js';
+import {
+  ClassificationNotFoundError,
+  GetTicketCapabilitiesUseCase,
+} from '../../application/triage/get-ticket-capabilities.use-case.js';
+import { InvalidTicketTransitionError } from '../../domain/tickets/ticket-state-machine.js';
 
 @ApiTags('Tickets')
 @ApiSecurity('user-id')
 @ApiSecurity('user-role')
+@ApiExtraModels(TicketClassificationDto, TicketCapabilitiesDto)
 @Controller('api/v1/tickets')
 export class TicketsController {
   constructor(
@@ -64,6 +76,8 @@ export class TicketsController {
     private readonly listTickets: ListTicketsUseCase,
     @Inject(TriageTicketUseCase)
     private readonly triageTicket: TriageTicketUseCase,
+    @Inject(GetTicketCapabilitiesUseCase)
+    private readonly getCapabilities: GetTicketCapabilitiesUseCase,
     @Inject(StartVpnDiagnosticUseCase)
     private readonly startVpnDiagnostic: StartVpnDiagnosticUseCase,
     @Inject(ProposeRemediationUseCase)
@@ -152,7 +166,10 @@ export class TicketsController {
       if (error instanceof TicketNotFoundError) {
         throw new NotFoundException(error.message);
       }
-      if (error instanceof ProhibitedRemediationError || error instanceof Error) {
+      if (
+        error instanceof ProhibitedRemediationError ||
+        error instanceof Error
+      ) {
         throw new BadRequestException(error.message);
       }
       throw error;
@@ -163,12 +180,22 @@ export class TicketsController {
   @Roles('SUPPORT_AGENT', 'ADMIN')
   @ApiOperation({ summary: 'Resolver un ticket con verificación exitosa' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  async resolve(@Param('id') id: string, @Body() body: ResolveTicketDto) {
+  async resolve(
+    @Param('id') id: string,
+    @Body() body: ResolveTicketDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
     try {
-      return await this.resolveTicket.execute(id, body);
+      return await this.resolveTicket.execute(id, {
+        resolutionSummary: body.resolutionSummary,
+        actorId: request.user.id,
+      });
     } catch (error) {
       if (error instanceof TicketNotFoundError) {
         throw new NotFoundException(error.message);
+      }
+      if (error instanceof InvalidTicketTransitionError) {
+        throw new ConflictException(error.message);
       }
       if (error instanceof ForbiddenException) throw error;
       throw new BadRequestException(
@@ -181,12 +208,33 @@ export class TicketsController {
   @Roles('SUPPORT_AGENT', 'ADMIN')
   @ApiOperation({ summary: 'Clasificar y priorizar un ticket' })
   @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(TicketClassificationDto) },
+        {
+          type: 'object',
+          required: ['ticketStatus', 'capabilities'],
+          properties: {
+            ticketStatus: {
+              type: 'string',
+              enum: ['CLASSIFIED', 'ESCALATED'],
+            },
+            capabilities: { $ref: getSchemaPath(TicketCapabilitiesDto) },
+          },
+        },
+      ],
+    },
+  })
   async classify(@Param('id') id: string) {
     try {
       return await this.triageTicket.execute(id);
     } catch (error) {
       if (error instanceof TicketNotFoundError) {
         throw new NotFoundException(error.message);
+      }
+      if (error instanceof InvalidTicketTransitionError) {
+        throw new ConflictException(error.message);
       }
       throw new BadRequestException(
         error instanceof Error ? error.message : 'Invalid triage result',
@@ -198,17 +246,17 @@ export class TicketsController {
   @Roles('SUPPORT_AGENT', 'ADMIN')
   @ApiOperation({ summary: 'Ejecutar diagnóstico seguro de conectividad VPN' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  async diagnose(
-    @Param('id') id: string,
-    @Body() body: StartVpnDiagnosticDto,
-  ) {
+  async diagnose(@Param('id') id: string, @Body() body: StartVpnDiagnosticDto) {
     try {
       return await this.startVpnDiagnostic.execute(id, body);
     } catch (error) {
       if (error instanceof TicketNotFoundError) {
         throw new NotFoundException(error.message);
       }
-      if (error instanceof UnsupportedDiagnosticError || error instanceof Error) {
+      if (
+        error instanceof UnsupportedDiagnosticError ||
+        error instanceof Error
+      ) {
         throw new BadRequestException(error.message);
       }
       throw error;
@@ -217,12 +265,48 @@ export class TicketsController {
 
   @Get()
   @Roles('END_USER', 'SUPPORT_AGENT', 'ADMIN', 'AUDITOR')
-  @ApiOperation({ summary: 'Listar y filtrar tickets con paginación por cursor' })
-  @ApiQuery({ name: 'limit', required: false, example: 20, minimum: 1, maximum: 100 })
-  @ApiQuery({ name: 'cursor', required: false, description: 'Cursor opaco devuelto por pageInfo.nextCursor' })
-  @ApiQuery({ name: 'status', required: false, enum: ['NEW', 'CLASSIFIED', 'IN_DIAGNOSIS', 'PENDING_USER', 'PENDING_APPROVAL', 'IN_REMEDIATION', 'ESCALATED', 'RESOLVED', 'CLOSED', 'REOPENED', 'CANCELLED'] })
-  @ApiQuery({ name: 'priority', required: false, enum: ['P1', 'P2', 'P3', 'P4'] })
-  @ApiQuery({ name: 'q', required: false, description: 'Busca en asunto o número' })
+  @ApiOperation({
+    summary: 'Listar y filtrar tickets con paginación por cursor',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    example: 20,
+    minimum: 1,
+    maximum: 100,
+  })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    description: 'Cursor opaco devuelto por pageInfo.nextCursor',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: [
+      'NEW',
+      'CLASSIFIED',
+      'IN_DIAGNOSIS',
+      'PENDING_USER',
+      'PENDING_APPROVAL',
+      'IN_REMEDIATION',
+      'ESCALATED',
+      'RESOLVED',
+      'CLOSED',
+      'REOPENED',
+      'CANCELLED',
+    ],
+  })
+  @ApiQuery({
+    name: 'priority',
+    required: false,
+    enum: ['P1', 'P2', 'P3', 'P4'],
+  })
+  @ApiQuery({
+    name: 'q',
+    required: false,
+    description: 'Busca en asunto o número',
+  })
   async list(
     @Req() request: AuthenticatedRequest,
     @Query('limit') limit?: string,
@@ -261,14 +345,33 @@ export class TicketsController {
     return this.getTimeline.execute(id);
   }
 
+  @Get(':id/capabilities')
+  @Roles('END_USER', 'SUPPORT_AGENT', 'ADMIN', 'AUDITOR')
+  @ApiOperation({
+    summary: 'Consultar clasificación y acciones permitidas por el backend',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: TicketCapabilitiesDto })
+  async capabilities(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    await this.assertTicketAccess(id, request);
+    try {
+      return await this.getCapabilities.execute(id);
+    } catch (error) {
+      if (error instanceof ClassificationNotFoundError) {
+        throw new NotFoundException(error.message);
+      }
+      throw error;
+    }
+  }
+
   @Get(':id')
   @Roles('END_USER', 'SUPPORT_AGENT', 'ADMIN', 'AUDITOR')
   @ApiOperation({ summary: 'Consultar un ticket por ID' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  async get(
-    @Param('id') id: string,
-    @Req() request: AuthenticatedRequest,
-  ) {
+  async get(@Param('id') id: string, @Req() request: AuthenticatedRequest) {
     try {
       const ticket = await this.getTicket.execute(id);
       if (
@@ -292,6 +395,9 @@ export class TicketsController {
     } catch (error) {
       if (error instanceof TicketNotFoundError) {
         throw new NotFoundException(error.message);
+      }
+      if (error instanceof InvalidTicketTransitionError) {
+        throw new ConflictException(error.message);
       }
       if (error instanceof ForbiddenException) throw error;
       throw new BadRequestException(

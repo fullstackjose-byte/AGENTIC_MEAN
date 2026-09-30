@@ -54,13 +54,45 @@ export interface TicketClassification {
   subcategory: string;
   priority: TicketPriority;
   confidence: number;
+  impact: string;
+  urgency: string;
+  entities: {
+    affectedUser?: string;
+    impactedService?: string;
+    businessCriticality?: 'LOW' | 'MEDIUM' | 'HIGH';
+  };
+  missingInformation: string[];
   nextAction: 'HANDOFF_DIAGNOSTIC' | 'ESCALATE_HUMAN';
   reason:
     | 'SUPPORTED_AND_COMPLETE'
     | 'LOW_CONFIDENCE_OR_UNSUPPORTED'
+    | 'NO_AUTOMATED_DIAGNOSTIC'
     | 'CRITICAL_PRIORITY';
-  ticketStatus: TicketStatus;
+  ticketStatus?: TicketStatus;
   createdAt: string;
+}
+
+export type TicketAction =
+  | 'RUN_VPN_DIAGNOSTIC'
+  | 'REQUEST_INFORMATION'
+  | 'ESCALATE_HUMAN';
+
+export interface TicketCapabilities {
+  classification: TicketClassification;
+  allowedActions: TicketAction[];
+  guidanceCode:
+    | 'VPN_DIAGNOSTIC_AVAILABLE'
+    | 'INFORMATION_REQUIRED'
+    | 'IDENTITY_REQUIRES_HUMAN'
+    | 'PROVISIONING_REQUIRES_HUMAN'
+    | 'UNSUPPORTED_REQUIRES_HUMAN'
+    | 'CRITICAL_REQUIRES_HUMAN';
+  slaExpectation: string;
+}
+
+export interface TicketClassificationResult extends TicketClassification {
+  ticketStatus: TicketStatus;
+  capabilities: TicketCapabilities;
 }
 
 export type OperatingSystem = 'WINDOWS' | 'MACOS' | 'LINUX';

@@ -19,6 +19,19 @@ const resolvedTicket = () =>
     priority: 'P3',
   });
 
+const newTicket = () =>
+  Ticket.restore({
+    id: '33333333-3333-4333-8333-333333333333',
+    number: 'TCK-2026-000002',
+    subject: 'VPN no conecta',
+    description: 'Pendiente de clasificar',
+    requesterId: 'user-123',
+    createdAt: new Date('2026-09-29T15:00:00.000Z'),
+    containsRedactedData: false,
+    status: 'NEW',
+    priority: 'P4',
+  });
+
 const dependencies = {
   nextId: () => 'audit-1',
   now: () => new Date('2026-09-29T20:00:00.000Z'),
@@ -83,6 +96,32 @@ describe('ticket lifecycle and audit timeline', () => {
     expect(timeline.map((event) => event.type)).toEqual([
       'TICKET_CREATED',
       'TICKET_RESOLVED',
+    ]);
+  });
+
+  it('rejects an invalid transition without partially changing the ticket', async () => {
+    const tickets = new InMemoryTicketRepository([newTicket()]);
+    const audit = new InMemoryAuditEventRepository();
+    const useCase = new CloseTicketUseCase(tickets, audit, dependencies);
+
+    await expect(
+      useCase.execute(newTicket().id, {
+        actorId: 'support-1',
+        reason: 'Pedido por ana@example.com',
+      }),
+    ).rejects.toThrow('NEW -> CLOSED');
+    await expect(tickets.findById(newTicket().id)).resolves.toMatchObject({
+      status: 'NEW',
+    });
+    await expect(audit.findByTicketId(newTicket().id)).resolves.toEqual([
+      expect.objectContaining({
+        type: 'TRANSITION_REJECTED',
+        metadata: expect.objectContaining({
+          from: 'NEW',
+          to: 'CLOSED',
+          reason: 'Pedido por [EMAIL_REDACTED]',
+        }),
+      }),
     ]);
   });
 });

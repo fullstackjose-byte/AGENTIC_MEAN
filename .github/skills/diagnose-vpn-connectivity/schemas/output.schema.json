@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["dnsResolved", "tcpReachable", "latencyMs", "errorCode"],
+  "required": ["dnsResolved", "tcpReachable", "latencyMs", "errorCode", "timestamp", "endpoint", "attempts"],
   "properties": {
     "dnsResolved": { "type": "boolean" },
     "tcpReachable": { "type": "boolean" },
@@ -10,6 +10,9 @@
     "errorCode": {
       "type": ["string", "null"],
       "enum": ["DNS_FAILURE", "TCP_UNREACHABLE", "TOOL_UNAVAILABLE", null]
-    }
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "endpoint": { "type": "string" },
+    "attempts": { "type": "integer", "minimum": 1, "maximum": 2 }
   }
 }

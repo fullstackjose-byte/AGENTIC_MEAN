@@ -3,7 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import type {
   CreateTicketInput,
   Ticket,
-  TicketClassification,
+  TicketClassificationResult,
   DiagnosticResult,
   OperatingSystem,
   Remediation,
@@ -11,6 +11,7 @@ import type {
   AuditEvent,
   TicketConnection,
   TicketFilters,
+  TicketCapabilities,
 } from '../domain/ticket.model';
 import { HttpParams } from '@angular/common/http';
 
@@ -39,9 +40,16 @@ export class TicketsApiService {
   }
 
   triage(ticketId: string) {
-    return this.http.post<TicketClassification>(
+    return this.http.post<TicketClassificationResult>(
       `${this.endpoint}/${ticketId}/classifications`,
       {},
+      this.auth('SUPPORT_AGENT', 'support-demo'),
+    );
+  }
+
+  capabilities(ticketId: string) {
+    return this.http.get<TicketCapabilities>(
+      `${this.endpoint}/${ticketId}/capabilities`,
       this.auth('SUPPORT_AGENT', 'support-demo'),
     );
   }

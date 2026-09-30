@@ -125,6 +125,21 @@ describe('TicketsApiService', () => {
     });
   });
 
+  it('loads backend-authoritative capabilities for a ticket', () => {
+    api.capabilities('ticket-1').subscribe();
+    const request = http.expectOne(
+      'http://localhost:3000/api/v1/tickets/ticket-1/capabilities',
+    );
+    expect(request.request.method).toBe('GET');
+    expect(request.request.headers.get('X-User-Role')).toBe('SUPPORT_AGENT');
+    request.flush({
+      classification: { id: 'classification-1', ticketId: 'ticket-1' },
+      allowedActions: ['RUN_VPN_DIAGNOSTIC'],
+      guidanceCode: 'VPN_DIAGNOSTIC_AVAILABLE',
+      slaExpectation: 'Diagnóstico inmediato.',
+    });
+  });
+
   it('proposes a remediation', () => {
     api
       .remediate('ticket-1', {

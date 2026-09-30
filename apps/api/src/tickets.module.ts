@@ -20,7 +20,7 @@ import { InMemoryClassificationRepository } from './infrastructure/persistence/i
 import { PrismaClassificationRepository } from './infrastructure/persistence/prisma-classification.repository.js';
 import { PrismaTicketRepository } from './infrastructure/persistence/prisma-ticket.repository.js';
 import { PrismaService } from './infrastructure/persistence/prisma.service.js';
-import { MockLanguageModelAdapter } from './infrastructure/llm/mock-language-model.adapter.js';
+import { languageModelFromEnvironment } from './infrastructure/llm/language-model.factory.js';
 import { TicketsController } from './interfaces/http/tickets.controller.js';
 import {
   DIAGNOSTIC_RUN_REPOSITORY,
@@ -56,6 +56,7 @@ import { ReopenTicketUseCase } from './application/tickets/reopen-ticket.use-cas
 import { GetTicketTimelineUseCase } from './application/tickets/get-ticket-timeline.use-case.js';
 import { RequestContextService } from './infrastructure/observability/request-context.service.js';
 import { CorrelatedAuditEventRepository } from './infrastructure/observability/correlated-audit-event.repository.js';
+import { GetTicketCapabilitiesUseCase } from './application/triage/get-ticket-capabilities.use-case.js';
 
 const AUDIT_EVENT_STORAGE = Symbol('AUDIT_EVENT_STORAGE');
 
@@ -81,7 +82,7 @@ const AUDIT_EVENT_STORAGE = Symbol('AUDIT_EVENT_STORAGE');
     },
     {
       provide: LANGUAGE_MODEL_PORT,
-      useFactory: (): LanguageModelPort => new MockLanguageModelAdapter(),
+      useFactory: (): LanguageModelPort => languageModelFromEnvironment(),
     },
     {
       provide: DIAGNOSTIC_RUN_REPOSITORY,
@@ -123,10 +124,8 @@ const AUDIT_EVENT_STORAGE = Symbol('AUDIT_EVENT_STORAGE');
     {
       provide: CreateTicketUseCase,
       inject: [TICKET_REPOSITORY, AUDIT_EVENT_REPOSITORY],
-      useFactory: (
-        repository: TicketRepository,
-        audit: AuditEventRepository,
-      ) => new CreateTicketUseCase(repository, undefined, audit),
+      useFactory: (repository: TicketRepository, audit: AuditEventRepository) =>
+        new CreateTicketUseCase(repository, undefined, audit),
     },
     {
       provide: GetTicketUseCase,
@@ -161,6 +160,12 @@ const AUDIT_EVENT_STORAGE = Symbol('AUDIT_EVENT_STORAGE');
           undefined,
           audit,
         ),
+    },
+    {
+      provide: GetTicketCapabilitiesUseCase,
+      inject: [CLASSIFICATION_REPOSITORY],
+      useFactory: (classifications: ClassificationRepository) =>
+        new GetTicketCapabilitiesUseCase(classifications),
     },
     {
       provide: StartVpnDiagnosticUseCase,
