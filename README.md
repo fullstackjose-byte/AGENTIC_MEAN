@@ -14,6 +14,58 @@ No necesitas instalar Node.js, pnpm ni PostgreSQL. El contenedor instala depende
 - OpenAPI JSON: http://localhost:3000/docs-json
 - Logs en el contenedor: `tail -f /tmp/helpdesk-dev.log`
 
+## Ver los logs de arranque
+
+Después de ejecutar **Dev Containers: Reopen in Container**, abre una terminal integrada de VS Code y ejecuta:
+
+```bash
+tail -f /tmp/helpdesk-dev.log
+```
+
+Este es el comando recomendado para comprobar en tiempo real:
+
+- instalación o sincronización de dependencias;
+- compilación de Angular y NestJS;
+- errores de TypeScript;
+- inicio de la API y registro de rutas;
+- solicitudes HTTP recibidas por el backend;
+- disponibilidad de Angular en el puerto `4200`;
+- disponibilidad de NestJS en el puerto `3000`.
+
+El primer arranque puede tardar mientras instala dependencias y compila ambos proyectos. La aplicación está lista cuando los logs muestran mensajes equivalentes a:
+
+```text
+Nest application successfully started
+Local: http://localhost:4200/
+```
+
+Para dejar de seguir los logs presiona `Ctrl+C`. Esto solamente cierra la visualización; Angular y NestJS continúan ejecutándose.
+
+Si el navegador presenta `ERR_EMPTY_RESPONSE`, mantén abierto el comando anterior y espera a que NestJS indique que inició correctamente. Después recarga http://localhost:4200.
+
+Para comprobar los servicios desde la terminal del contenedor:
+
+```bash
+pnpm dev:status
+```
+
+La salida esperada debe informar HTTP `200` para Angular, API y Swagger.
+
+Si estás usando PowerShell fuera del Dev Container, ejecuta el mismo seguimiento mediante Docker:
+
+```powershell
+docker compose exec workspace tail -f /tmp/helpdesk-dev.log
+```
+
+También puedes consultar los logs propios de los contenedores:
+
+```powershell
+docker compose logs -f workspace
+docker compose logs -f postgres
+```
+
+`workspace` contiene Angular y NestJS; `postgres` contiene los mensajes de PostgreSQL. No publiques logs que puedan contener información interna, aunque la aplicación aplique sanitización automática.
+
 ## Observabilidad local
 
 La API acepta opcionalmente `X-Correlation-Id`; si no se envía, genera un UUID. El valor siempre vuelve en la respuesta, se incorpora a la auditoría del ticket y aparece como `ID de seguimiento` en Angular. Los logs HTTP son JSON, incluyen duración y resultado, y redactan contraseñas, tokens, cookies y claves.
